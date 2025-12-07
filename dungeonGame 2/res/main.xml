@@ -1,0 +1,23 @@
+<?xml version='1.0'?>
+<DevRes>
+    <Images>
+        <!-- Dungeon Game Images (relative to res directory) -->
+        <Res id="empty" path="images/empty.png"/>
+        <Res id="start" path="images/start.png"/>
+        <Res id="exit" path="images/exit.png"/>
+        <Res id="reward" path="images/reward.png"/>
+        <Res id="bandit" path="images/bandit.png"/>
+        <Res id="mine" path="images/mine.png"/>
+        <Res id="wall" path="images/wall.png"/>
+        <Res id="player" path="images/player.png"/>
+        <Res id="visited" path="images/visited.png"/>
+        <Res id="path" path="images/path.png"/>
+        
+        <!-- You can keep other images if needed -->
+        <Res id="settings" path="Work/Common/Icons/SettingsBlue48.png"/>
+    </Images>
+    
+    <!-- Optional: Keep or remove symbols and sounds -->
+    <Symbols/>  
+    <Sounds/>
+</DevRes>
