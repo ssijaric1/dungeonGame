@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<res>
+    <Images>
+        <Res id="empty" path="Work/Common/Icons/images/empty.png"/>
+        <Res id="start_tile" path="Work/Common/Icons/images/start.png"/>
+        <Res id="exit" path="Work/Common/Icons/images/exit.png"/>
+        <Res id="reward" path="Work/Common/Icons/images/reward.png"/>
+        <Res id="bandit" path="Work/Common/Icons/images/bandit.png"/>
+        <Res id="mine" path="Work/Common/Icons/images/mine.png"/>
+        <Res id="player" path="Work/Common/Icons/images/player.png"/>
+    </Images>
+</res>
