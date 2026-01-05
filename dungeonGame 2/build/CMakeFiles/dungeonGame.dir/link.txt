@@ -1,1 +1,0 @@
-/usr/bin/c++ -fuse-ld=gold CMakeFiles/dungeonGame.dir/main.cpp.o CMakeFiles/dungeonGame.dir/res/appIcon/winAppIcon.cpp.o -o dungeonGame  -Wl,-rpath,/home/sehy/other_bin/myLib /home/sehy/other_bin/myLib/mainUtils.so /home/sehy/other_bin/myLib/natGUI.so 

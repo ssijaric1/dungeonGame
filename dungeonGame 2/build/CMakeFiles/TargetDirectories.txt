@@ -1,3 +1,0 @@
-/home/sehy/Work/CppProjects/dungeonGame 2/build/CMakeFiles/dungeonGame.dir
-/home/sehy/Work/CppProjects/dungeonGame 2/build/CMakeFiles/edit_cache.dir
-/home/sehy/Work/CppProjects/dungeonGame 2/build/CMakeFiles/rebuild_cache.dir
