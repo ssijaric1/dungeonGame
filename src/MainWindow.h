@@ -9,8 +9,14 @@ protected:
 
 public:
     MainWindow() : gui::Window(gui::Size(1200, 800)) {  // Changed from Geometry to Size
-        this->setTitle("Port Logistics Simulation");
+        this->setTitle(tr("Port Logistics Simulation"));
         this->setCentralView(&view);
         setResizable(true);
+    }
+
+protected:
+    void onInitialAppearance() override
+    {
+        view.focusOnCanvas();
     }
 };
