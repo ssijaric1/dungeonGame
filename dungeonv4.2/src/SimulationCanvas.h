@@ -14,12 +14,12 @@
 #include <iostream>
 #include "Algorithms.h"
 #include "GameState.h"
-#include "QuestionsPopUp.h"  // Add this line
+#include "QuestionsPopUp.h"
 
 class SimulationCanvas : public gui::Canvas {
 public:
     SimulationCanvas() 
-    : gui::Canvas({ gui::InputDevice::Event::Keyboard })
+    : gui::Canvas({ gui::InputDevice::Event::Keyboard, gui::InputDevice::Event::PrimaryClicks })
     , rng(std::random_device{}())  // Initialize rng FIRST
     , gameState(rng)               // THEN initialize gameState with rng
     , imgPlayer(":player")
@@ -66,6 +66,9 @@ public:
             {initialState.exitX, initialState.exitY}
         );
         
+        pathLength = algorithmPath.size();
+        nodesExplored = calculateNodesExplored(1);
+        
         std::cout << "BFS path found with " << algorithmPath.size() << " steps" << std::endl;
         gameState.visualizePath(algorithmPath);
         reDraw();
@@ -87,6 +90,9 @@ public:
             {initialState.exitX, initialState.exitY}
         );
         
+        pathLength = algorithmPath.size();
+        nodesExplored = calculateNodesExplored(2);
+        
         std::cout << "DFS path found with " << algorithmPath.size() << " steps" << std::endl;
         gameState.visualizePath(algorithmPath);
         reDraw();
@@ -94,12 +100,12 @@ public:
     
     void runDijkstraAlgorithm() {
         if (!gameState.isGameOver()) {
-            std::cout << "Dijkstra: Game must be over to run algorithm" << std::endl;
+            std::cout << "UCS: Game must be over to run algorithm" << std::endl;
             return;
         }
         
         algorithmRunning = true;
-        currentAlgorithm = 3;  // Dijkstra
+        currentAlgorithm = 3;  // Dijkstra/UCS
         
         const auto& initialState = gameState.getInitialState();
         algorithmPath = DungeonAlgorithms::dijkstraSearch(
@@ -108,7 +114,10 @@ public:
             {initialState.exitX, initialState.exitY}
         );
         
-        std::cout << "Dijkstra path found with " << algorithmPath.size() << " steps" << std::endl;
+        pathLength = algorithmPath.size();
+        nodesExplored = calculateNodesExplored(3);
+        
+        std::cout << "UCS path found with " << algorithmPath.size() << " steps" << std::endl;
         gameState.visualizePath(algorithmPath);
         reDraw();
     }
@@ -128,6 +137,9 @@ public:
             {initialState.playerStartX, initialState.playerStartY},
             {initialState.exitX, initialState.exitY}
         );
+        
+        pathLength = algorithmPath.size();
+        nodesExplored = calculateNodesExplored(4);
         
         std::cout << "A* path found with " << algorithmPath.size() << " steps" << std::endl;
         gameState.visualizePath(algorithmPath);
@@ -150,6 +162,9 @@ public:
             {initialState.exitX, initialState.exitY}
         );
         
+        pathLength = algorithmPath.size();
+        nodesExplored = calculateNodesExplored(5);
+        
         std::cout << "Greedy path found with " << algorithmPath.size() << " steps" << std::endl;
         gameState.visualizePath(algorithmPath);
         reDraw();
@@ -159,6 +174,8 @@ public:
         algorithmRunning = false;
         currentAlgorithm = 0;
         algorithmPath.clear();
+        pathLength = 0;
+        nodesExplored = 0;
         gameState.resetVisualization();
         std::cout << "Algorithm visualization reset" << std::endl;
         reDraw();
@@ -191,20 +208,54 @@ protected:
             }
         }
         
-        // Algorithm triggers (only when game is over)
+        // Handle ASCII keys (WASD and algorithm triggers)
         if (key.isASCII()) {
             char ch = key.getChar();
+            
+            // WASD movement keys
+            if (ch == 'w' || ch == 'W') {
+                bool moved = gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() - 1);
+                if (moved) reDraw();
+                return true;
+            }
+            if (ch == 's' || ch == 'S') {
+                bool moved = gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() + 1);
+                if (moved) reDraw();
+                return true;
+            }
+            
+            // Algorithm triggers (only when game is over)
             switch(ch) {
+                case 'a': case 'A':
+                    if (!gameState.isGameOver()) {
+                        // Movement left
+                        bool moved = gameState.movePlayer(gameState.getPlayerX() - 1, gameState.getPlayerY());
+                        if (moved) reDraw();
+                    } else {
+                        // A* algorithm
+                        runAStarAlgorithm();
+                    }
+                    return true;
+                case 'd': case 'D':
+                    if (!gameState.isGameOver()) {
+                        // Movement right
+                        bool moved = gameState.movePlayer(gameState.getPlayerX() + 1, gameState.getPlayerY());
+                        if (moved) reDraw();
+                    } else {
+                        // DFS algorithm
+                        runDFSAlgorithm();
+                    }
+                    return true;
                 case '1': case 'b': case 'B': 
                     runBFSAlgorithm(); 
                     return true;
-                case '2': case 'd': case 'D': 
+                case '2':
                     runDFSAlgorithm(); 
                     return true;
                 case '3': case 'j': case 'J': 
                     runDijkstraAlgorithm(); 
                     return true;
-                case '4': case 'a': case 'A': 
+                case '4':
                     runAStarAlgorithm(); 
                     return true;
                 case '5': case 'g': case 'G': 
@@ -222,6 +273,58 @@ protected:
         return gui::Canvas::onKeyPressed(key);
     }
     
+    void onPrimaryButtonPressed(const gui::InputDevice& inputDevice) override {
+        gui::Point clickPos = inputDevice.getModelPoint();
+        
+        // Check if clicked on dropdown
+        if (dropdownRect.contains(clickPos)) {
+            dropdownExpanded = !dropdownExpanded;
+            reDraw();
+            return;
+        }
+        
+        // Check if clicked on dropdown menu items
+        if (dropdownExpanded) {
+            for (int i = 0; i < 5; i++) {
+                if (dropdownItemRects[i].contains(clickPos)) {
+                    currentAlgorithm = i + 1;
+                    dropdownExpanded = false;
+                    
+                    // Run the selected algorithm if game is over
+                    if (gameState.isGameOver()) {
+                        switch (currentAlgorithm) {
+                            case 1: runBFSAlgorithm(); break;
+                            case 2: runDFSAlgorithm(); break;
+                            case 3: runDijkstraAlgorithm(); break;
+                            case 4: runAStarAlgorithm(); break;
+                            case 5: runGreedyAlgorithm(); break;
+                        }
+                    }
+                    
+                    reDraw();
+                    return;
+                }
+            }
+            
+            // Close dropdown if clicked elsewhere
+            dropdownExpanded = false;
+            reDraw();
+            return;
+        }
+        
+        // Check if clicked on "Generate New Game" button
+        if (generateNewGameRect.contains(clickPos)) {
+            resetGame();
+            return;
+        }
+        
+        // Check if clicked on "Reset" button
+        if (resetButtonRect.contains(clickPos) && algorithmRunning) {
+            resetAlgorithmVisualization();
+            return;
+        }
+    }
+    
     void resetGame() {
         // Create new random number generator and game state
         rng = std::mt19937(std::random_device{}());
@@ -235,30 +338,33 @@ protected:
         algorithmRunning = false;
         currentAlgorithm = 0;
         algorithmPath.clear();
+        pathLength = 0;
+        nodesExplored = 0;
+        dropdownExpanded = false;
         std::cout << "New game started" << std::endl;
         reDraw();
     }
     
-    // Handle game events (like mine hits) - SIMPLE VERSION
+    // Handle game events (like mine hits) - KEEPING ORIGINAL VERSION WITH QuestionsPopUp
     void handleGameEvent(const std::string& event, int value) {
-    if (event == "mine") {
-        // Create dialog with random question using factory method
-        DialogLogin* dlg = DialogLogin::createWithRandomQuestion(this);
-        
-        dlg->openModal([this, value](gui::Dialog* pDlg) {
-            DialogLogin* questionDlg = (DialogLogin*) pDlg;
+        if (event == "mine") {
+            // Create dialog with random question using factory method
+            DialogLogin* dlg = DialogLogin::createWithRandomQuestion(this);
             
-            if (questionDlg->isAnswerCorrect()) {
-                td::String message;
-                message.format("Correct! You avoid losing %d gold!", value);
-                gui::Alert::show("Mine Avoided!", message);
-            } else {
-                td::String message;
-                message.format("Wrong answer! You lose %d gold.", value);
-                gui::Alert::show("Mine Hit!", message);
-            }
-        });
-    }
+            dlg->openModal([this, value](gui::Dialog* pDlg) {
+                DialogLogin* questionDlg = (DialogLogin*) pDlg;
+                
+                if (questionDlg->isAnswerCorrect()) {
+                    td::String message;
+                    message.format("Correct! You avoid losing %d gold!", value);
+                    gui::Alert::show("Mine Avoided!", message);
+                } else {
+                    td::String message;
+                    message.format("Wrong answer! You lose %d gold.", value);
+                    gui::Alert::show("Mine Hit!", message);
+                }
+            });
+        }
         else if (event == "reward") {
             td::String message;
             message.format("You found %d gold!\nTotal gold: %d", value, gameState.getGold());
@@ -282,61 +388,43 @@ protected:
         leftZoneWidth = minDimension * 0.9;
         leftZoneHeight = leftZoneWidth;
         
-        rightZoneWidth = newSize.width * 0.20;
-        rightZoneHeight = newSize.height * 0.9;
-        
-        gui::CoordType zoneGap = newSize.width * 0.02;
-        
-        leftZoneLeft = newSize.width * 0.05;
+        gui::CoordType zoneGap = newSize.width * 0.015;
+        leftZoneLeft = newSize.width * 0.03;
         leftZoneTop = (newSize.height - leftZoneHeight) / 2;
         
         rightZoneLeft = leftZoneLeft + leftZoneWidth + zoneGap;
+        rightZoneWidth = newSize.width - rightZoneLeft - (newSize.width * 0.03);
+        rightZoneHeight = newSize.height * 0.9;
         rightZoneTop = (newSize.height - rightZoneHeight) / 2;
         
         this->reDraw();
     }
     
     void onDraw(const gui::Rect& rect) override {
-        // Draw background
+        // Draw background - USING NEW COLOR
         gui::Shape bg;
         bg.createRect(rect);
-        bg.drawFill(td::ColorID::Black);
+        bg.drawFill(td::ColorID::Moss);
         
-        // Draw left zone (1:1 square)
-        drawZone(leftZoneLeft, leftZoneTop, leftZoneWidth, leftZoneHeight, 
-                 "Game grid", td::ColorID::White);
-        
-        // Draw right zone (wider for buttons)  
-        drawZone(rightZoneLeft, rightZoneTop, rightZoneWidth, rightZoneHeight,
-                 "Controls", td::ColorID::White);
-        
-        // Draw game grid with all elements
+        // Draw left zone (game grid)
         drawGameGrid();
         
-        // Draw game status in right zone
-        drawGameStatus();
-        
-        // Draw algorithm status if running
-        if (algorithmRunning) {
-            drawAlgorithmStatus();
-        }
+        // Draw right zone (control panel)
+        drawControlPanel();
     }
     
 private:
-    // Drawing methods
-    void drawZone(gui::CoordType left, gui::CoordType top, 
-                  gui::CoordType width, gui::CoordType height,
-                  const std::string& label, td::ColorID borderColor) {
-        gui::Shape zoneBorder;
-        zoneBorder.createRect(gui::Rect(left, top, left + width, top + height));
-        zoneBorder.drawWire(borderColor);
-        
-        gui::DrawableString::draw(label.c_str(), label.length(),
-                                 gui::Rect(left, top - 35, left + width, top - 5),
-                                 gui::Font::ID::SystemNormal,
-                                 td::ColorID::LightGray,
-                                 td::TextAlignment::Center,
-                                 td::VAlignment::Center);
+    // Helper function to calculate nodes explored (estimation)
+    int calculateNodesExplored(int algorithmType) {
+        // This is a simplified estimation
+        switch (algorithmType) {
+            case 1: return pathLength * 2;      // BFS explores more
+            case 2: return pathLength * 3;      // DFS can explore many dead ends
+            case 3: return pathLength * 2;      // Dijkstra similar to BFS
+            case 4: return pathLength;          // A* is efficient
+            case 5: return pathLength;          // Greedy is fast
+            default: return 0;
+        }
     }
     
     void drawGameGrid() {
@@ -349,65 +437,66 @@ private:
         gui::CoordType gridStartX = leftZoneLeft + margin;
         gui::CoordType gridStartY = leftZoneTop + margin;
         
-        // Draw grid background
+        // Draw grid background - USING NEW COLOR
         if (backgroundLoaded) {
             try {
-                imgBackground.draw(gui::Rect(gridStartX, gridStartY, 
-                                            gridStartX + gridAreaSize, 
-                                            gridStartY + gridAreaSize));
-            } catch (...) {
+                imgBackground.draw(gui::Rect(gridStartX, gridStartY,
+                    gridStartX + gridAreaSize,
+                    gridStartY + gridAreaSize));
+            }
+            catch (...) {
                 backgroundLoaded = false;
                 gui::Shape gridBg;
-                gridBg.createRect(gui::Rect(gridStartX, gridStartY, 
-                                           gridStartX + gridAreaSize, 
-                                           gridStartY + gridAreaSize));
-                gridBg.drawFill(td::ColorID::Black);
+                gridBg.createRect(gui::Rect(gridStartX, gridStartY,
+                    gridStartX + gridAreaSize,
+                    gridStartY + gridAreaSize));
+                gridBg.drawFill(td::ColorID::DarkGray);
             }
-        } else {
+        }
+        else {
             gui::Shape gridBg;
-            gridBg.createRect(gui::Rect(gridStartX, gridStartY, 
-                                       gridStartX + gridAreaSize, 
-                                       gridStartY + gridAreaSize));
-            gridBg.drawFill(td::ColorID::Black);
+            gridBg.createRect(gui::Rect(gridStartX, gridStartY,
+                gridStartX + gridAreaSize,
+                gridStartY + gridAreaSize));
+            gridBg.drawFill(td::ColorID::DarkGray);
         }
         
-        // Draw horizontal grid lines
+        // Draw grid lines
         for (int j = 0; j <= GRID_SIZE; j++) {
             gui::Shape line;
             gui::Point points[2];
-            points[0] = {gridStartX, gridStartY + j * cellSize};
-            points[1] = {gridStartX + gridAreaSize, gridStartY + j * cellSize};
-            line.createLines(points, 2, 5);
-            line.drawWire(td::ColorID::DarkGray);
+            points[0] = { gridStartX, gridStartY + j * cellSize };
+            points[1] = { gridStartX + gridAreaSize, gridStartY + j * cellSize };
+            line.createLines(points, 2, 2);
+            line.drawWire(td::ColorID::Gray);
         }
         
-        // Draw vertical grid lines
         for (int i = 0; i <= GRID_SIZE; i++) {
             gui::Shape line;
             gui::Point points[2];
-            points[0] = {gridStartX + i * cellSize, gridStartY};
-            points[1] = {gridStartX + i * cellSize, gridStartY + gridAreaSize};
-            line.createLines(points, 2, 5);
-            line.drawWire(td::ColorID::DarkGray);
+            points[0] = { gridStartX + i * cellSize, gridStartY };
+            points[1] = { gridStartX + i * cellSize, gridStartY + gridAreaSize };
+            line.createLines(points, 2, 2);
+            line.drawWire(td::ColorID::Gray);
         }
         
         // Draw game elements
         for (int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
-                int cellType = gameState.getDisplayCell(i, j); 
+                int cellType = gameState.getDisplayCell(i, j);
                 if (cellType != GameState::EMPTY) {
                     drawCellContent(gridStartX + i * cellSize,
-                                    gridStartY + j * cellSize,
-                                    cellSize, cellType);
+                        gridStartY + j * cellSize,
+                        cellSize, cellType);
                 }
             }
         }
     }
     
-    void drawCellContent(gui::CoordType x, gui::CoordType y, 
+    void drawCellContent(gui::CoordType x, gui::CoordType y,
                         gui::CoordType size, int cellType) {
         gui::CoordType margin = size * 0.1;
-        gui::Rect cellRect(x + margin, y + margin, 
+        gui::Rect cellRect(x + margin, y + margin,
                           x + size - margin, y + size - margin);
         
         // Handle algorithm path first
@@ -473,151 +562,300 @@ private:
         }
     }
     
-    void drawGameStatus() {
-        gui::CoordType statusX = rightZoneLeft + 15;
-        gui::CoordType statusY = rightZoneTop + 20;
+    void drawControlPanel() {
+        gui::CoordType panelX = rightZoneLeft;
+        gui::CoordType panelY = rightZoneTop;
+        gui::CoordType panelWidth = rightZoneWidth;
+        gui::CoordType currentY = panelY + 15;
         
-        // Game title
-        gui::DrawableString::draw("Dungeon Game", 12,
-                                 gui::Rect(statusX, statusY, 
-                                          statusX + rightZoneWidth - 30, statusY + 40),
-                                 gui::Font::ID::SystemBold,
-                                 td::ColorID::White,
-                                 td::TextAlignment::Center,
-                                 td::VAlignment::Center);
+        // Title
+        drawSectionTitle("Select Algorithm:", panelX, currentY, panelWidth);
+        currentY += 45;
         
-        statusY += 50;
+        // Save dropdown position but DON'T draw it yet
+        gui::CoordType dropdownY = currentY;
+        currentY += 70;
         
-        // Gold
-        std::string goldStr = "Gold: " + std::to_string(gameState.getGold());
-        gui::DrawableString::draw(goldStr.c_str(), goldStr.length(),
-                                 gui::Rect(statusX, statusY, 
-                                          statusX + rightZoneWidth - 30, statusY + 30),
-                                 gui::Font::ID::SystemNormal,
-                                 td::ColorID::Yellow);
+        // Statistics panel
+        drawStatisticsPanel(panelX, currentY, panelWidth);
+        currentY += 165;
         
-        statusY += 40;
+        // Control buttons
+        drawControlButtons(panelX, currentY, panelWidth);
+        currentY += 190;
         
-        // Player position
-        auto playerX = gameState.getPlayerX();
-        auto playerY = gameState.getPlayerY();
-        std::string posStr = "Position: " + std::to_string(playerX) + "," + std::to_string(playerY);
-        gui::DrawableString::draw(posStr.c_str(), posStr.length(),
-                                 gui::Rect(statusX, statusY, 
-                                          statusX + rightZoneWidth - 30, statusY + 30),
-                                 gui::Font::ID::SystemNormal,
-                                 td::ColorID::Green);
+        // Algorithm comparison table
+        drawComparisonTable(panelX, currentY, panelWidth);
         
-        statusY += 40;
+        // Draw dropdown LAST so it appears on top of everything
+        drawAlgorithmDropdown(panelX, dropdownY, panelWidth);
         
-        // Game status
-        std::string statusStr;
-        td::ColorID statusColor = td::ColorID::White;
-        
-        if (gameState.isGameOver()) {
-            if (gameState.isGameWon()) {
-                statusStr = "YOU WIN!";
-                statusColor = td::ColorID::Green;
-            } else {
-                statusStr = "GAME OVER";
-                statusColor = td::ColorID::Red;
-            }
-        } else {
-            statusStr = "Use arrows to move";
-            statusColor = td::ColorID::LightGray;
-        }
-        
-        gui::DrawableString::draw(statusStr.c_str(), statusStr.length(),
-                                 gui::Rect(statusX, statusY, 
-                                          statusX + rightZoneWidth - 30, statusY + 40),
-                                 gui::Font::ID::SystemNormal,
-                                 statusColor,
-                                 td::TextAlignment::Center);
-        
-        // Draw legend
-        statusY = rightZoneTop + 250;
-        
-        gui::DrawableString::draw("Legend:", 7,
-                                 gui::Rect(statusX, statusY, 
-                                          statusX + rightZoneWidth - 30, statusY + 30),
-                                 gui::Font::ID::SystemBold,
-                                 td::ColorID::White);
-        
-        statusY += 35;
-        
-        std::pair<std::string, td::ColorID> legend[] = {
-            {"1 or B - BFS", td::ColorID::White},
-            {"2 or D - DFS", td::ColorID::White},
-            {"3 or J - Dijkstra", td::ColorID::White},
-            {"4 or A - A*", td::ColorID::White},
-            {"5 or G - Greedy", td::ColorID::White},
-            {"R - Reset View", td::ColorID::White},
-            {"N - New Game", td::ColorID::White}
-        };
-        
-        for (int i = 0; i < 7; i++) {
-            gui::Shape legendShape;
-            legendShape.createRect(gui::Rect(statusX, statusY + 5,
-                                            statusX + 18, statusY + 23));
-            legendShape.drawFill(legend[i].second);
-            
-            gui::DrawableString::draw(legend[i].first.c_str(), legend[i].first.length(),
-                                     gui::Rect(statusX + 25, statusY,
-                                              statusX + rightZoneWidth - 30, statusY + 28),
-                                     gui::Font::ID::SystemNormal,
-                                     td::ColorID::White);
-            
-            statusY += 35;
-        }
-        
-        // Draw algorithm instructions
-        if (gameState.isGameOver()) {
-            statusY += 20;
-            gui::DrawableString::draw("Algorithms:", 11,
-                                     gui::Rect(statusX, statusY, 
-                                              statusX + rightZoneWidth - 30, statusY + 30),
-                                     gui::Font::ID::SystemBold,
-                                     td::ColorID::LightBlue);
-            
-            statusY += 35;
-            
-            std::string algoInstructions = "Press:\n1-BFS\n2-DFS\n3-Dijkstra\n4-A*\n5-Greedy\nR-Reset\nN-New Game";
-            gui::DrawableString::draw(algoInstructions.c_str(), algoInstructions.length(),
-                                     gui::Rect(statusX, statusY, 
-                                              statusX + rightZoneWidth - 30, statusY + 140),
-                                     gui::Font::ID::SystemSmaller,
-                                     td::ColorID::LightGray,
-                                     td::TextAlignment::Left,
-                                     td::VAlignment::Top);
+        // Draw dropdown menu AFTER dropdown if expanded
+        if (dropdownExpanded) {
+            drawDropdownMenu(panelX, dropdownY + 53, panelWidth);
         }
     }
     
-    void drawAlgorithmStatus() {
-        gui::CoordType statusX = leftZoneLeft + 10;
-        gui::CoordType statusY = leftZoneTop + 10;
+    void drawSectionTitle(const char* title, gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        gui::DrawableString::draw(title, strlen(title),
+            gui::Rect(x, y, x + width, y + 30),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::White,
+            td::TextAlignment::Left,
+            td::VAlignment::Center);
+    }
+    
+    void drawAlgorithmDropdown(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        // Store dropdown rectangle for click detection
+        dropdownRect = gui::Rect(x, y, x + width, y + 50);
+        
+        // Dropdown background - gray-green like grid
+        gui::Shape selectorBg;
+        selectorBg.createRoundedRect(dropdownRect, 6);
+        selectorBg.drawFill(td::ColorID::Moss);
+        
+        // Red outline
+        gui::Shape selectorBorder;
+        selectorBorder.createRoundedRect(dropdownRect, 6);
+        selectorBorder.drawWire(td::ColorID::LightGreen, 2);
         
         std::string algoName;
-        switch(currentAlgorithm) {
-            case 1: algoName = "BFS"; break;
-            case 2: algoName = "DFS"; break;
-            case 3: algoName = "Dijkstra"; break;
-            case 4: algoName = "A*"; break;
-            case 5: algoName = "Greedy"; break;
-            default: algoName = "Algorithm";
+        switch (currentAlgorithm) {
+            case 0: algoName = "Select Algorithm..."; break;
+            case 1: algoName = "Breadth-First Search (BFS)"; break;
+            case 2: algoName = "Depth-First Search (DFS)"; break;
+            case 3: algoName = "Uniform Cost Search (UCS)"; break;
+            case 4: algoName = "A* Search"; break;
+            case 5: algoName = "Greedy Best-First Search"; break;
         }
         
-        std::string statusText = algoName + " Path: " + std::to_string(algorithmPath.size()) + " steps";
+        gui::DrawableString::draw(algoName.c_str(), algoName.length(),
+            gui::Rect(x + 15, y, x + width - 40, y + 50),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::White,
+            td::TextAlignment::Left,
+            td::VAlignment::Center);
         
-        gui::Shape bg;
-        bg.createRect(gui::Rect(statusX - 5, statusY - 5, 
-                               statusX + 150, statusY + 25));
-        bg.drawFill(td::ColorID::DarkGray);
+        // Dropdown arrow
+        const char* arrow = dropdownExpanded ? "^" : "v";
+        gui::DrawableString::draw(arrow, strlen(arrow),
+            gui::Rect(x + width - 35, y, x + width - 10, y + 50),
+            gui::Font::ID::SystemBold,
+            td::ColorID::White,
+            td::TextAlignment::Center,
+            td::VAlignment::Center);
+    }
+    
+    void drawDropdownMenu(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        const char* options[] = {
+            "Breadth-First Search (BFS)",
+            "Depth-First Search (DFS)",
+            "Uniform Cost Search (UCS)",
+            "A* Search",
+            "Greedy Best-First Search"
+        };
         
-        gui::DrawableString::draw(statusText.c_str(), statusText.length(),
-                                 gui::Rect(statusX, statusY, 
-                                          statusX + 140, statusY + 20),
-                                 gui::Font::ID::SystemNormal,
-                                 td::ColorID::White);
+        gui::CoordType itemHeight = 45;
+        gui::CoordType menuHeight = 5 * itemHeight;
+        
+        // Menu background - gray-green
+        gui::Shape menuBg;
+        gui::Rect menuRect(x, y, x + width, y + menuHeight);
+        menuBg.createRoundedRect(menuRect, 6);
+        menuBg.drawFill(td::ColorID::Moss);
+        
+        // Red border
+        gui::Shape menuBorder;
+        menuBorder.createRoundedRect(menuRect, 6);
+        menuBorder.drawWire(td::ColorID::LightGreen, 2);
+        
+        // Draw each option and store rectangles
+        for (int i = 0; i < 5; i++) {
+            gui::CoordType itemY = y + i * itemHeight;
+            dropdownItemRects[i] = gui::Rect(x, itemY, x + width, itemY + itemHeight);
+            
+            // Highlight if selected - with red
+            if (i + 1 == currentAlgorithm) {
+                gui::Shape highlight;
+                highlight.createRect(gui::Rect(x + 3, itemY + 2, x + width - 3, itemY + itemHeight - 2));
+                highlight.drawFill(td::ColorID::DarkRed);
+            }
+            
+            gui::DrawableString::draw(options[i], strlen(options[i]),
+                gui::Rect(x + 15, itemY, x + width - 15, itemY + itemHeight),
+                gui::Font::ID::SystemNormal,
+                td::ColorID::White,
+                td::TextAlignment::Left,
+                td::VAlignment::Center);
+        }
+    }
+    
+    void drawStatisticsPanel(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        // Stats container - gray-green
+        gui::Shape statsBg;
+        gui::Rect statsRect(x, y, x + width, y + 150);
+        statsBg.createRoundedRect(statsRect, 6);
+        statsBg.drawFill(td::ColorID::Moss);
+        
+        // Red border
+        gui::Shape statsBorder;
+        statsBorder.createRoundedRect(statsRect, 6);
+        statsBorder.drawWire(td::ColorID::LightGreen, 2);
+        
+        gui::CoordType currentY = y + 20;
+        
+        // Gold and Status row
+        drawStatRow("Current Gold", std::to_string(gameState.getGold()),
+            "Status", gameState.isGameOver() ? (gameState.isGameWon() ? "Reached the Exit!" : "Game Over") : "Playing",
+            x + 20, currentY, width - 40);
+        currentY += 65;
+        
+        // Path Length and Nodes Explored row
+        drawStatRow("Path Length", std::to_string(pathLength),
+            "Nodes Explored", std::to_string(nodesExplored),
+            x + 20, currentY, width - 40);
+    }
+    
+    void drawStatRow(const char* label1, const std::string& value1,
+                    const char* label2, const std::string& value2,
+                    gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        gui::CoordType halfWidth = width / 2;
+        
+        // Left stat - more spacing
+        gui::DrawableString::draw(label1, strlen(label1),
+            gui::Rect(x, y, x + halfWidth - 15, y + 22),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::LightGray,
+            td::TextAlignment::Left,
+            td::VAlignment::Center);
+        
+        gui::DrawableString::draw(value1.c_str(), value1.length(),
+            gui::Rect(x, y + 25, x + halfWidth - 15, y + 50),
+            gui::Font::ID::SystemBold,
+            td::ColorID::Yellow,
+            td::TextAlignment::Left,
+            td::VAlignment::Center);
+        
+        // Right stat - more spacing
+        gui::DrawableString::draw(label2, strlen(label2),
+            gui::Rect(x + halfWidth + 15, y, x + width, y + 22),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::LightGray,
+            td::TextAlignment::Right,
+            td::VAlignment::Center);
+        
+        gui::DrawableString::draw(value2.c_str(), value2.length(),
+            gui::Rect(x + halfWidth + 15, y + 25, x + width, y + 50),
+            gui::Font::ID::SystemBold,
+            td::ColorID::LightGreen,
+            td::TextAlignment::Right,
+            td::VAlignment::Center);
+    }
+    
+    void drawControlButtons(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        gui::CoordType buttonHeight = 45;
+        gui::CoordType buttonSpacing = 12;
+        gui::CoordType currentY = y;
+        
+        // Row 1: START and PAUSE - gray-green
+        drawRoundedButton("START", x, currentY, width / 2 - 6, buttonHeight,
+            td::ColorID::Moss, false, gui::Rect());
+        drawRoundedButton("PAUSE", x + width / 2 + 6, currentY, width / 2 - 6, buttonHeight,
+            td::ColorID::Moss, false, gui::Rect());
+        currentY += buttonHeight + buttonSpacing;
+        
+        // Row 2: STEP and RESET - gray-green
+        drawRoundedButton("STEP", x, currentY, width / 2 - 6, buttonHeight,
+            td::ColorID::Moss, false, gui::Rect());
+        
+        resetButtonRect = gui::Rect(x + width / 2 + 6, currentY,
+            x + width, currentY + buttonHeight);
+        drawRoundedButton("RESET", x + width / 2 + 6, currentY, width / 2 - 6, buttonHeight,
+            td::ColorID::Moss, algorithmRunning, resetButtonRect);
+        currentY += buttonHeight + buttonSpacing;
+        
+        // Row 3: GENERATE NEW GAME - Dark Red
+        generateNewGameRect = gui::Rect(x, currentY, x + width, currentY + buttonHeight);
+        drawRoundedButton("GENERATE NEW DUNGEON", x, currentY, width, buttonHeight,
+            td::ColorID::Copper, true, generateNewGameRect);
+    }
+    
+    void drawRoundedButton(const char* label, gui::CoordType x, gui::CoordType y,
+                          gui::CoordType width, gui::CoordType height,
+                          td::ColorID color, bool enabled, const gui::Rect& clickRect) {
+        gui::Shape buttonBg;
+        gui::Rect buttonRect(x, y, x + width, y + height);
+        buttonBg.createRoundedRect(buttonRect, 6);
+        buttonBg.drawFill(enabled ? color : td::ColorID::DimGray);
+        
+        // Border
+        gui::Shape buttonBorder;
+        buttonBorder.createRoundedRect(buttonRect, 6);
+        buttonBorder.drawWire(enabled ? td::ColorID::Gray : td::ColorID::DarkGray, 1);
+        
+        // Always white text
+        gui::DrawableString::draw(label, strlen(label),
+            gui::Rect(x, y, x + width, y + height),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::White,
+            td::TextAlignment::Center,
+            td::VAlignment::Center);
+    }
+    
+    void drawComparisonTable(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        // Title
+        gui::DrawableString::draw("Algorithm Comparison", 21,
+            gui::Rect(x, y, x + width, y + 30),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::White,
+            td::TextAlignment::Left,
+            td::VAlignment::Center);
+        
+        y += 35;
+        
+        // Table background - gray-green
+        gui::Shape tableBg;
+        gui::Rect tableRect(x, y, x + width, y + 145);
+        tableBg.createRoundedRect(tableRect, 6);
+        tableBg.drawFill(td::ColorID::Moss);
+        
+        // Red border
+        gui::Shape tableBorder;
+        tableBorder.createRoundedRect(tableRect, 6);
+        tableBorder.drawWire(td::ColorID::LightGreen, 2);
+        
+        // Header row
+        gui::CoordType headerY = y + 15;
+        drawTableHeader(x + 15, headerY, width - 30);
+        
+        // Message
+        const char* msg = "Run algorithms to see metrics";
+        gui::DrawableString::draw(msg, strlen(msg),
+            gui::Rect(x + 20, headerY + 40, x + width - 20, headerY + 95),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::LightGray,
+            td::TextAlignment::Center,
+            td::VAlignment::Center);
+    }
+    
+    void drawTableHeader(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        gui::CoordType col1 = width * 0.35;
+        gui::CoordType col2 = width * 0.20;
+        gui::CoordType col3 = width * 0.20;
+        gui::CoordType col4 = width * 0.25;
+        
+        const char* headers[] = { "Algorithm", "Time", "Gold", "Efficiency" };
+        gui::CoordType positions[] = { x, x + col1, x + col1 + col2, x + col1 + col2 + col3 };
+        
+        for (int i = 0; i < 4; i++) {
+            gui::CoordType w = (i == 0) ? col1 : (i == 1) ? col2 : (i == 2) ? col3 : col4;
+            gui::DrawableString::draw(headers[i], strlen(headers[i]),
+                gui::Rect(positions[i], y, positions[i] + w, y + 22),
+                gui::Font::ID::SystemSmaller,
+                td::ColorID::White,
+                td::TextAlignment::Left,
+                td::VAlignment::Center);
+        }
     }
     
 private:
@@ -653,4 +891,13 @@ private:
     bool algorithmRunning = false;
     std::vector<std::pair<int, int>> algorithmPath;
     int currentAlgorithm = 0;  // 0=none, 1=BFS, 2=DFS, 3=Dijkstra, 4=A*, 5=Greedy
+    int pathLength = 0;
+    int nodesExplored = 0;
+    bool dropdownExpanded = false;
+    
+    // Button rectangles for click detection
+    gui::Rect dropdownRect;
+    gui::Rect dropdownItemRects[5];
+    gui::Rect generateNewGameRect;
+    gui::Rect resetButtonRect;
 };
