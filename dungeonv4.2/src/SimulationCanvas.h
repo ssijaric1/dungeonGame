@@ -227,22 +227,25 @@ public:
 
     // Animation control methods
     void startAnimation() {
-        if (algorithmRunning && !isAnimating) {
+        if (algorithmRunning) {  // FIXED: Removed && !isAnimating so START button works anytime
             isAnimating = true;
             lastAnimationTime = std::chrono::steady_clock::now();
-            std::cout << "Animation started" << std::endl;
+            std::cout << "Animation started/resumed" << std::endl;
+            gui::Canvas::startAnimation();  // CRITICAL FIX: Start Canvas animation loop!
             reDraw();
         }
     }
 
     void stopAnimation() {
         isAnimating = false;
+        gui::Canvas::stopAnimation();  // CRITICAL FIX: Stop Canvas animation loop!
         std::cout << "Animation stopped" << std::endl;
     }
 
     void pauseAnimation() {
-        if (algorithmRunning && isAnimating) {
+        if (algorithmRunning) {  // FIXED: Removed && isAnimating so PAUSE button works anytime
             isAnimating = false;
+            gui::Canvas::stopAnimation();  // CRITICAL FIX: Stop Canvas animation loop!
             std::cout << "Animation paused" << std::endl;
             reDraw();
         }
@@ -289,7 +292,6 @@ public:
                 if (currentExploredIndex < fullExploredNodes.size()) {
                     currentExploredIndex++;
                     lastAnimationTime = currentTime;
-                    reDraw();
                 }
                 else {
                     animationPhase = 1; // Switch to path animation
@@ -301,11 +303,11 @@ public:
                 if (currentPathIndex < fullAlgorithmPath.size()) {
                     currentPathIndex++;
                     lastAnimationTime = currentTime;
-                    reDraw();
                 }
                 else {
-                    // Animation complete
+                    // Animation complete - stop Canvas animation
                     isAnimating = false;
+                    gui::Canvas::stopAnimation();
                     std::cout << "Animation complete" << std::endl;
                 }
             }
@@ -562,15 +564,15 @@ protected:
             return;
         }
 
-        // Check if clicked on "Start Animation" button
-        if (startButtonRect.contains(clickPos) && algorithmRunning && !isAnimating) {
-            startAnimation();  // Start animation from beginning
+        // Check if clicked on "Start Animation" button - FIXED: Now actually starts animation
+        if (startButtonRect.contains(clickPos) && algorithmRunning) {
+            startAnimation();  // Start or resume animation
             return;
         }
 
-        // Check if clicked on "Pause Animation" button
-        if (pauseButtonRect.contains(clickPos) && algorithmRunning && isAnimating) {
-            pauseAnimation();  // Stop animation where it is
+        // Check if clicked on "Pause Animation" button - FIXED: Now pauses even if not running
+        if (pauseButtonRect.contains(clickPos) && algorithmRunning) {
+            pauseAnimation();  // Pause animation
             return;
         }
 
@@ -595,11 +597,18 @@ protected:
 
 
     void resetGame() {
+        // CONSTRAINT: Cannot generate new game while actively playing (game must be over)
+        if (!gameState.isGameOver()) {
+            showAlert("Game In Progress", "You must finish the current game first! Reach the exit before generating a new dungeon.");
+            return;
+        }
+
         // If player has ever reached the exit, must check requirement before allowing new dungeon
         if (gameState.hasEverReachedExit() && !gameState.hasMetRewardRequirement()) {
             // Didn't meet requirement - show alert and reset to try again
-            showAlert("Insufficient Rewards!",
-                "You need to collect at least 40 points in rewards (4 rewards) to generate a new dungeon. Try again!");
+            td::String message;
+            message.format("You only had %d gold (need 20 gold) to generate a new dungeon. Try again!", gameState.getGold());
+            showAlert("Insufficient Gold!", message);
             gameState.resetPlayerPosition();
             reDraw();
             return;
@@ -667,7 +676,7 @@ protected:
         }
         else if (event == "exit_insufficient") {
             td::String message;
-            message.format("Insufficient Rewards!\n\nYou collected %d rewards (need 4 for 40 points).\nThe dungeon will reset - try again!", value);
+            message.format("Insufficient Gold!\n\nYou only had %d gold (need 20 gold).\nThe dungeon will reset - try again!", value);
             gui::Alert::show("Cannot Generate New Dungeon", message);
             // Auto-reset after showing alert
             gameState.resetPlayerPosition();
@@ -805,22 +814,10 @@ private:
         border.createRect(gui::Rect(x, y, x + size, y + size));
         border.drawWire(td::ColorID::Yellow, 3.0f);
 
-        // Draw animation status text
-        std::string status;
-        if (animationPhase == 0) {
-            status = "Exploring: " + std::to_string(currentExploredIndex) + "/" + std::to_string(fullExploredNodes.size());
-        }
-        else {
-            status = "Path: " + std::to_string(currentPathIndex) + "/" + std::to_string(fullAlgorithmPath.size());
-        }
-
-        gui::DrawableString::draw(status.c_str(), status.length(),
-            gui::Rect(x, y - 25, x + size, y),
-            gui::Font::ID::SystemSmaller,
-            td::ColorID::Yellow,
-            td::TextAlignment::Center,
-            td::VAlignment::Bottom);
+        // REMOVED: Animation status text above grid ("Exploring: X/Y")
+        // This text has been removed per user request
     }
+
 
     void drawCellContent(gui::CoordType x, gui::CoordType y,
         gui::CoordType size, int cellType) {
@@ -843,18 +840,38 @@ private:
             return;
         }
 
-        // Handle algorithm path
+        // Handle algorithm path with illuminated outline
         if (cellType == GameState::PATH_VISUAL) {
-            gui::Shape pathShape;
-            pathShape.createRect(cellRect);
-            pathShape.drawFill(td::ColorID::Purple);
+            // Draw multiple layered outlines for a glowing effect
+            gui::CoordType glowWidth = size * 0.08;
 
-            try {
-                imgPath.draw(cellRect);
-            }
-            catch (...) {
-                // No path image, just use colored square
-            }
+            // Outer glow (brightest, yellow)
+            gui::Shape outerGlow;
+            gui::Rect outerRect(x + margin - glowWidth, y + margin - glowWidth,
+                x + size - margin + glowWidth, y + size - margin + glowWidth);
+            outerGlow.createRoundedRect(outerRect, 4);
+            outerGlow.drawWire(td::ColorID::Yellow, glowWidth);
+
+            // Middle glow (orange)
+            gui::Shape middleGlow;
+            gui::CoordType middleOffset = glowWidth * 0.5;
+            gui::Rect middleRect(x + margin - middleOffset, y + margin - middleOffset,
+                x + size - margin + middleOffset, y + size - margin + middleOffset);
+            middleGlow.createRoundedRect(middleRect, 3);
+            middleGlow.drawWire(td::ColorID::Orange, glowWidth * 0.7);
+
+            // Inner glow/outline (white, brightest)
+            gui::Shape innerOutline;
+            innerOutline.createRoundedRect(cellRect, 2);
+            innerOutline.drawWire(td::ColorID::White, 3);
+
+            // Optional: subtle fill to make it more visible
+            gui::Shape pathFill;
+            gui::Rect fillRect(x + margin + 3, y + margin + 3,
+                x + size - margin - 3, y + size - margin - 3);
+            pathFill.createRect(fillRect);
+            pathFill.drawFill(td::ColorID::LightYellow);
+
             return;
         }
 
@@ -1173,6 +1190,7 @@ private:
             td::VAlignment::Center);
     }
 
+
     void drawComparisonTable(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
         // Title
         gui::DrawableString::draw("Algorithm Comparison", 21,
@@ -1184,9 +1202,15 @@ private:
 
         y += 35;
 
+        // Calculate required height based on current algorithm
+        gui::CoordType tableHeight = 80; // Default height  
+        if (currentAlgorithm > 0) {
+            tableHeight = 270; // Taller to fit algorithm details with generous spacing
+        }
+
         // Table background
         gui::Shape tableBg;
-        gui::Rect tableRect(x, y, x + width, y + 145);
+        gui::Rect tableRect(x, y, x + width, y + tableHeight);
         tableBg.createRoundedRect(tableRect, 6);
         tableBg.drawFill(td::ColorID::Moss);
 
@@ -1195,48 +1219,150 @@ private:
         tableBorder.createRoundedRect(tableRect, 6);
         tableBorder.drawWire(td::ColorID::LightGreen, 2);
 
-        // Header row
-        gui::CoordType headerY = y + 15;
-        drawTableHeader(x + 15, headerY, width - 30);
+        gui::CoordType contentY = y + 15;
 
-        // Animation speed control message
-        const char* speedMsg = "Animation Speed: Medium (100ms/step)";
-        gui::DrawableString::draw(speedMsg, strlen(speedMsg),
-            gui::Rect(x + 20, headerY + 40, x + width - 20, headerY + 95),
+        if (currentAlgorithm > 0) {
+            // Show algorithm details
+            drawAlgorithmDetails(x + 15, contentY, width - 30);
+        }
+        else {
+            // Show default message
+            const char* msg = "Select and run an algorithm to see details";
+            gui::DrawableString::draw(msg, strlen(msg),
+                gui::Rect(x + 20, contentY + 30, x + width - 20, contentY + 60),
+                gui::Font::ID::SystemNormal,
+                td::ColorID::LightGray,
+                td::TextAlignment::Center,
+                td::VAlignment::Center);
+        }
+
+        // Keyboard controls text removed per user request
+    }
+
+    void drawAlgorithmDetails(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        const char* algorithmName = "";
+        const char* description = "";
+        const char* heuristic = "";
+        const char* timeComplexity = "";
+        const char* spaceComplexity = "";
+
+        // Calculate actual execution time
+        auto animationDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - animationStartTime).count();
+        char timeBuffer[64];
+        snprintf(timeBuffer, sizeof(timeBuffer), "%lld ms", animationDuration);
+
+        switch (currentAlgorithm) {
+        case 1: // BFS
+            algorithmName = "BFS (Breadth-First Search)";
+            description = "Explores level-by-level using queue. Guarantees shortest path (unweighted).";
+            heuristic = "None (blind search)";
+            timeComplexity = "O(V + E) = O(b^d)";
+            spaceComplexity = "O(V) = O(b^d)";
+            break;
+        case 2: // DFS
+            algorithmName = "DFS (Depth-First Search)";
+            description = "Explores depth-first using stack. Does NOT guarantee shortest path.";
+            heuristic = "None (blind search)";
+            timeComplexity = "O(V + E) = O(b^d)";
+            spaceComplexity = "O(h) = O(bd) if limited";
+            break;
+        case 3: // Dijkstra/UCS
+            algorithmName = "UCS / Dijkstra";
+            description = "Uses priority queue for min cost. Costs: Rewards=0, Mines=8, Bandits=15.";
+            heuristic = "None (uses actual cost only)";
+            timeComplexity = "O((V + E) log V)";
+            spaceComplexity = "O(V)";
+            break;
+        case 4: // A*
+            algorithmName = "A* Search";
+            description = "Combines cost (g) + heuristic (h). Optimal if heuristic is admissible.";
+            heuristic = "Manhattan distance: |x1-x2| + |y1-y2|";
+            timeComplexity = "O((V + E) log V)";
+            spaceComplexity = "O(V)";
+            break;
+        case 5: // Greedy
+            algorithmName = "Greedy Best-First";
+            description = "Uses ONLY heuristic to goal, ignores cost. Fast but NOT optimal.";
+            heuristic = "Manhattan distance: |x1-x2| + |y1-y2|";
+            timeComplexity = "O(b^d) worst case";
+            spaceComplexity = "O(b^d)";
+            break;
+        default:
+            return;
+        }
+
+        gui::CoordType lineHeight = 20;
+        gui::CoordType currentY = y;
+
+        // Algorithm Name (highlighted)
+        gui::DrawableString::draw(algorithmName, strlen(algorithmName),
+            gui::Rect(x, currentY, x + width, currentY + lineHeight + 2),
+            gui::Font::ID::SystemBold,
+            td::ColorID::Yellow,
+            td::TextAlignment::Left,
+            td::VAlignment::Top);
+        currentY += lineHeight + 8;
+
+        // Description (allocate more space to ensure full visibility)
+        gui::DrawableString::draw(description, strlen(description),
+            gui::Rect(x, currentY, x + width, currentY + lineHeight * 3),
             gui::Font::ID::SystemSmaller,
             td::ColorID::LightGray,
-            td::TextAlignment::Center,
-            td::VAlignment::Center);
+            td::TextAlignment::Left,
+            td::VAlignment::Top);
+        currentY += lineHeight * 2 + 12;
 
-        // Controls hint
-        const char* controls = "Press SPACE to play/pause, T to step (when paused)";
-        gui::DrawableString::draw(controls, strlen(controls),
-            gui::Rect(x + 20, headerY + 100, x + width - 20, headerY + 130),
+        // Heuristic
+        char heuristicLabel[128];
+        snprintf(heuristicLabel, sizeof(heuristicLabel), "Heuristic: %s", heuristic);
+        gui::DrawableString::draw(heuristicLabel, strlen(heuristicLabel),
+            gui::Rect(x, currentY, x + width, currentY + lineHeight),
             gui::Font::ID::SystemSmaller,
-            td::ColorID::LightGray,
-            td::TextAlignment::Center,
-            td::VAlignment::Center);
+            td::ColorID::White,
+            td::TextAlignment::Left,
+            td::VAlignment::Top);
+        currentY += lineHeight + 6;
+
+        // Time Complexity
+        char timeComplexLabel[128];
+        snprintf(timeComplexLabel, sizeof(timeComplexLabel), "Time Complexity: %s", timeComplexity);
+        gui::DrawableString::draw(timeComplexLabel, strlen(timeComplexLabel),
+            gui::Rect(x, currentY, x + width, currentY + lineHeight),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::LightGreen,
+            td::TextAlignment::Left,
+            td::VAlignment::Top);
+        currentY += lineHeight + 6;
+
+        // Space Complexity
+        char spaceComplexLabel[128];
+        snprintf(spaceComplexLabel, sizeof(spaceComplexLabel), "Space Complexity: %s", spaceComplexity);
+        gui::DrawableString::draw(spaceComplexLabel, strlen(spaceComplexLabel),
+            gui::Rect(x, currentY, x + width, currentY + lineHeight),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::LightGreen,
+            td::TextAlignment::Left,
+            td::VAlignment::Top);
+        currentY += lineHeight + 6;
+
+        // Real execution time
+        char execTimeLabel[128];
+        snprintf(execTimeLabel, sizeof(execTimeLabel), "Execution Time: %s", timeBuffer);
+        gui::DrawableString::draw(execTimeLabel, strlen(execTimeLabel),
+            gui::Rect(x, currentY, x + width, currentY + lineHeight),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::Cyan,
+            td::TextAlignment::Left,
+            td::VAlignment::Top);
+        // Note: Removed the duplicate "Path Steps | Nodes Explored" line since it's already shown above
     }
 
     void drawTableHeader(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
-        gui::CoordType col1 = width * 0.35;
-        gui::CoordType col2 = width * 0.20;
-        gui::CoordType col3 = width * 0.20;
-        gui::CoordType col4 = width * 0.25;
-
-        const char* headers[] = { "Algorithm", "Time", "Gold", "Efficiency" };
-        gui::CoordType positions[] = { x, x + col1, x + col1 + col2, x + col1 + col2 + col3 };
-
-        for (int i = 0; i < 4; i++) {
-            gui::CoordType w = (i == 0) ? col1 : (i == 1) ? col2 : (i == 2) ? col3 : col4;
-            gui::DrawableString::draw(headers[i], strlen(headers[i]),
-                gui::Rect(positions[i], y, positions[i] + w, y + 22),
-                gui::Font::ID::SystemSmaller,
-                td::ColorID::White,
-                td::TextAlignment::Left,
-                td::VAlignment::Center);
-        }
+        // This method is no longer used but kept for compatibility
+        // Algorithm details are now shown by drawAlgorithmDetails()
     }
+
 
 private:
     // IMPORTANT: rng MUST be declared BEFORE gameState

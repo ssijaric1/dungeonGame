@@ -50,7 +50,7 @@ public:
     int getCollectedRewards() const { return collectedRewards; }
     bool isGameOver() const { return gameOver; }
     bool isGameWon() const { return gameWon; }
-    bool hasMetRewardRequirement() const { return collectedRewards >= 4; }  // Need 4 rewards * 10 = 40 points
+    bool hasMetRewardRequirement() const { return gold >= 20; }  // Need at least 20 gold points
     bool hasEverReachedExit() const { return hasReachedExitOnce; }
 
     // Set callback for game events
@@ -124,17 +124,17 @@ public:
             gameOver = true;
             gameWon = true;
             hasReachedExitOnce = true;  // Mark that exit was reached
-            // Only reveal all if collected at least 4 rewards (40 points)
-            if (collectedRewards >= 4) {
+            // Only reveal all if have at least 20 gold
+            if (gold >= 20) {
                 revealAll();
                 if (gameEventCallback) {
                     gameEventCallback("exit", 0);
                 }
             }
             else {
-                // Insufficient rewards - notify immediately
+                // Insufficient gold - notify immediately
                 if (gameEventCallback) {
-                    gameEventCallback("exit_insufficient", collectedRewards);
+                    gameEventCallback("exit_insufficient", gold);
                 }
             }
             break;
@@ -283,17 +283,17 @@ private:
         initialState.exitY = exitRow;
 
         // Place rewards (save positions)
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 5; i++) {
             placeRandomTile(rng, actualGrid, REWARD, &initialState.rewards);
         }
 
         // Place bandits (save positions)
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 5; i++) {
             placeRandomTile(rng, actualGrid, BANDIT, &initialState.bandits);
         }
 
         // Place mines (save positions)
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 5; i++) {
             placeRandomTile(rng, actualGrid, MINE, &initialState.mines);
         }
 
