@@ -20,6 +20,7 @@ public:
     static const int MINE = 4;
     static const int EXIT = 5;
     static const int PATH_VISUAL = 6;
+    static const int EXPLORED_NODE = 7;  // NEW: For explored nodes
     
     // Callback type for game events
     using GameEventCallback = std::function<void(const std::string& event, int value)>;
@@ -52,6 +53,16 @@ public:
     // Set callback for game events
     void setGameEventCallback(const GameEventCallback& callback) {
         gameEventCallback = callback;
+    }
+    
+    // NEW: Set explored nodes for visualization
+    void setExploredNodes(const std::vector<std::pair<int, int>>& nodes) {
+        exploredNodes = nodes;
+    }
+    
+    // NEW: Clear explored nodes
+    void clearExploredNodes() {
+        exploredNodes.clear();
     }
     
     // For display grid access
@@ -140,7 +151,21 @@ public:
         displayGrid[initialState.playerStartX][initialState.playerStartY] = PLAYER;
         displayGrid[initialState.exitX][initialState.exitY] = EXIT;
         
-        // Mark path cells
+        // Mark explored nodes first (drawn underneath everything)
+        for (const auto& pos : exploredNodes) {
+            int x = pos.first;
+            int y = pos.second;
+            // Don't overwrite start, exit, or obstacles
+            if (!(x == initialState.playerStartX && y == initialState.playerStartY) &&
+                !(x == initialState.exitX && y == initialState.exitY)) {
+                int cellType = initialState.actualGrid[x][y];
+                if (cellType < REWARD || cellType > MINE) {
+                    displayGrid[x][y] = EXPLORED_NODE;
+                }
+            }
+        }
+        
+        // Mark path cells (drawn on top of explored nodes)
         for (const auto& pos : path) {
             int x = pos.first;
             int y = pos.second;
@@ -150,7 +175,7 @@ public:
             }
         }
         
-        // Show obstacles from initial state
+        // Show obstacles from initial state (drawn on top of both)
         for (int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
                 int cellType = initialState.actualGrid[i][j];
@@ -163,6 +188,7 @@ public:
     
     void resetVisualization() {
         // Reset to current game state
+        exploredNodes.clear();
         if (gameOver) {
             revealAll();
         } else {
@@ -179,6 +205,7 @@ private:
         // Initialize grids
         memset(actualGrid, 0, sizeof(actualGrid));
         memset(displayGrid, 0, sizeof(displayGrid));
+        exploredNodes.clear();
         
         // Clear initial state vectors
         initialState.rewards.clear();
@@ -249,10 +276,9 @@ private:
         }
     }
 
-    // Add this method to GameState class in GameState.h
     void adjustGold(int amount) {
         gold = std::max(0, gold + amount);
-    // Ensure gold doesn't go negative
+        // Ensure gold doesn't go negative
         if (gold < 0) gold = 0;
     }
     
@@ -265,6 +291,9 @@ private:
     int actualGrid[GRID_SIZE][GRID_SIZE];
     int displayGrid[GRID_SIZE][GRID_SIZE];
     InitialState initialState;
+    
+    // NEW: Track explored nodes for algorithm visualization
+    std::vector<std::pair<int, int>> exploredNodes;
     
     // Callback for game events
     GameEventCallback gameEventCallback;

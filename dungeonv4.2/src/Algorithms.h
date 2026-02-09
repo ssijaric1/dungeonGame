@@ -1,3 +1,4 @@
+// Algorithms.h
 #pragma once
 #include <vector>
 #include <utility>
@@ -15,6 +16,12 @@ namespace DungeonAlgorithms {
     // ==================== CONSTANTS ====================
     const int GRID_SIZE = 10;
     const int DIRECTIONS[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    
+    // ==================== STRUCTS ====================
+    struct SearchResult {
+        std::vector<std::pair<int, int>> path;
+        std::vector<std::pair<int, int>> exploredNodes;
+    };
     
     // ==================== UTILITY FUNCTIONS ====================
     inline bool isValid(int x, int y) {
@@ -53,17 +60,19 @@ namespace DungeonAlgorithms {
     }
     
     // ==================== ALGORITHM IMPLEMENTATIONS ====================
-    inline std::vector<std::pair<int, int>> bfsSearch(
+    inline SearchResult bfsSearch(
         const int grid[GRID_SIZE][GRID_SIZE],
         std::pair<int, int> start,
         std::pair<int, int> goal) {
         
+        SearchResult result;
         std::queue<std::pair<int, int>> q;
         std::set<std::pair<int, int>> visited;
         std::map<std::pair<int, int>, std::pair<int, int>> parent;
         
         q.push(start);
         visited.insert(start);
+        result.exploredNodes.push_back(start);
         parent[start] = {-1, -1};
         
         while (!q.empty()) {
@@ -71,7 +80,8 @@ namespace DungeonAlgorithms {
             q.pop();
             
             if (current == goal) {
-                return reconstructPath(parent, start, goal);
+                result.path = reconstructPath(parent, start, goal);
+                return result;
             }
             
             for (int i = 0; i < 4; i++) {
@@ -83,6 +93,7 @@ namespace DungeonAlgorithms {
                     
                     if (visited.find(neighbor) == visited.end()) {
                         visited.insert(neighbor);
+                        result.exploredNodes.push_back(neighbor);
                         parent[neighbor] = current;
                         q.push(neighbor);
                     }
@@ -90,20 +101,22 @@ namespace DungeonAlgorithms {
             }
         }
         
-        return std::vector<std::pair<int, int>>();
+        return result;
     }
     
-    inline std::vector<std::pair<int, int>> dfsSearch(
+    inline SearchResult dfsSearch(
         const int grid[GRID_SIZE][GRID_SIZE],
         std::pair<int, int> start,
         std::pair<int, int> goal) {
         
+        SearchResult result;
         std::stack<std::pair<int, int>> s;
         std::set<std::pair<int, int>> visited;
         std::map<std::pair<int, int>, std::pair<int, int>> parent;
         
         s.push(start);
         visited.insert(start);
+        result.exploredNodes.push_back(start);
         parent[start] = {-1, -1};
         
         while (!s.empty()) {
@@ -111,7 +124,8 @@ namespace DungeonAlgorithms {
             s.pop();
             
             if (current == goal) {
-                return reconstructPath(parent, start, goal);
+                result.path = reconstructPath(parent, start, goal);
+                return result;
             }
             
             for (int i = 3; i >= 0; i--) {
@@ -123,6 +137,7 @@ namespace DungeonAlgorithms {
                     
                     if (visited.find(neighbor) == visited.end()) {
                         visited.insert(neighbor);
+                        result.exploredNodes.push_back(neighbor);
                         parent[neighbor] = current;
                         s.push(neighbor);
                     }
@@ -130,13 +145,15 @@ namespace DungeonAlgorithms {
             }
         }
         
-        return std::vector<std::pair<int, int>>();
+        return result;
     }
     
-    inline std::vector<std::pair<int, int>> dijkstraSearch(
+    inline SearchResult dijkstraSearch(
         const int grid[GRID_SIZE][GRID_SIZE],
         std::pair<int, int> start,
         std::pair<int, int> goal) {
+        
+        SearchResult result;
         
         struct Node {
             std::pair<int, int> position;
@@ -160,13 +177,15 @@ namespace DungeonAlgorithms {
         distance[start] = 0;
         parent[start] = {-1, -1};
         pq.push({start, 0});
+        result.exploredNodes.push_back(start);
         
         while (!pq.empty()) {
             Node current = pq.top();
             pq.pop();
             
             if (current.position == goal) {
-                return reconstructPath(parent, start, goal);
+                result.path = reconstructPath(parent, start, goal);
+                return result;
             }
             
             if (current.cost > distance[current.position]) {
@@ -186,18 +205,26 @@ namespace DungeonAlgorithms {
                         distance[neighbor] = newCost;
                         parent[neighbor] = current.position;
                         pq.push({neighbor, newCost});
+                        
+                        // Add to explored nodes if not already added
+                        if (std::find(result.exploredNodes.begin(), result.exploredNodes.end(), neighbor) 
+                            == result.exploredNodes.end()) {
+                            result.exploredNodes.push_back(neighbor);
+                        }
                     }
                 }
             }
         }
         
-        return std::vector<std::pair<int, int>>();
+        return result;
     }
     
-    inline std::vector<std::pair<int, int>> aStarSearch(
+    inline SearchResult aStarSearch(
         const int grid[GRID_SIZE][GRID_SIZE],
         std::pair<int, int> start,
         std::pair<int, int> goal) {
+        
+        SearchResult result;
         
         auto heuristic = [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
             return abs(a.first - b.first) + abs(a.second - b.second);
@@ -227,13 +254,15 @@ namespace DungeonAlgorithms {
         int hStart = heuristic(start, goal);
         pq.push({start, hStart, 0, hStart});
         parent[start] = {-1, -1};
+        result.exploredNodes.push_back(start);
         
         while (!pq.empty()) {
             Node current = pq.top();
             pq.pop();
             
             if (current.position == goal) {
-                return reconstructPath(parent, start, goal);
+                result.path = reconstructPath(parent, start, goal);
+                return result;
             }
             
             if (closedSet.find(current.position) != closedSet.end()) {
@@ -262,24 +291,31 @@ namespace DungeonAlgorithms {
                         int h = heuristic(neighbor, goal);
                         int f = tentativeGScore + h;
                         pq.push({neighbor, f, tentativeGScore, h});
+                        
+                        // Add to explored nodes if not already added
+                        if (std::find(result.exploredNodes.begin(), result.exploredNodes.end(), neighbor) 
+                            == result.exploredNodes.end()) {
+                            result.exploredNodes.push_back(neighbor);
+                        }
                     }
                 }
             }
         }
         
-        return std::vector<std::pair<int, int>>();
+        return result;
     }
     
-    inline std::vector<std::pair<int, int>> greedySearch(
+    inline SearchResult greedySearch(
         const int grid[GRID_SIZE][GRID_SIZE],
         std::pair<int, int> start,
         std::pair<int, int> goal) {
         
-        std::vector<std::pair<int, int>> path;
+        SearchResult result;
         std::pair<int, int> current = start;
         std::set<std::pair<int, int>> visited;
         
-        path.push_back(start);
+        result.path.push_back(start);
+        result.exploredNodes.push_back(start);
         visited.insert(start);
         
         while (current != goal) {
@@ -314,11 +350,12 @@ namespace DungeonAlgorithms {
             }
             
             current = {bestX, bestY};
-            path.push_back(current);
+            result.path.push_back(current);
+            result.exploredNodes.push_back(current);
             visited.insert(current);
         }
         
-        return path;
+        return result;
     }
     
     inline void printPath(const std::vector<std::pair<int, int>>& path) {
