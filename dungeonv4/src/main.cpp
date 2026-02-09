@@ -1,7 +1,9 @@
 #include "Application.h"
+#include <td/StringConverter.h>
 #include <gui/WinMain.h>
+#include <functional>
 
-int main(int argc, const char* argv[])
+int main(int argc, const char * argv[])
 {
     Application app(argc, argv);
     auto appProperties = app.getProperties();

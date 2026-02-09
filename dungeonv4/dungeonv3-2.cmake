@@ -1,5 +1,5 @@
 # dungeonv2.cmake
-set(PROJECT_NAME dungeonv2)
+set(PROJECT_NAME dungeonv3)
 
 # Explicitly list only the source files we want
 file(GLOB PROJECT_SOURCES  ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp)

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-set(SOLUTION_NAME dungeonv2)	# Change to your project name
+set(SOLUTION_NAME dungeonv3-2)	# Change to your project name
 
 #BEGIN: Standard structure for all solutions
 project(${SOLUTION_NAME})
@@ -15,4 +15,4 @@ include(${WORK_ROOT}/DevEnv/Common.cmake)
 
 include(${WORK_ROOT}/DevEnv/natGUI.cmake)
 
-include(dungeonv2.cmake)
+include(dungeonv3-2.cmake)
