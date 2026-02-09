@@ -1,4 +1,3 @@
-// SimulationCanvas.h
 #pragma once
 #include <vector>   
 #include <utility>     
@@ -7,21 +6,22 @@
 #include <gui/Shape.h>
 #include <gui/DrawableString.h>
 #include <gui/Image.h>
-#include <gui/Button.h>
-#include <gui/ComboBox.h>
+#include <gui/Alert.h>
 #include <algorithm>
 #include <random>
 #include <ctime>
 #include <iostream>
+#include <chrono>
 #include "Algorithms.h"
 #include "GameState.h"
+#include "QuestionsPopUp.h"
 
 class SimulationCanvas : public gui::Canvas {
 public:
     SimulationCanvas()
         : gui::Canvas({ gui::InputDevice::Event::Keyboard, gui::InputDevice::Event::PrimaryClicks })
-        , rng(std::random_device{}())
-        , gameState(rng)
+        , rng(std::random_device{}())  // Initialize rng FIRST
+        , gameState(rng)               // THEN initialize gameState with rng
         , imgPlayer(":player")
         , imgReward(":reward")
         , imgBandit(":bandit")
@@ -30,6 +30,12 @@ public:
         , imgBackground(":background")
         , imgPath(":path") {
         enableResizeEvent(true);
+
+        // Set up game event callbacks
+        gameState.setGameEventCallback([this](const std::string& event, int value) {
+            handleGameEvent(event, value);
+            });
+
         std::cout << "SimulationCanvas initialized successfully" << std::endl;
     }
 
@@ -43,7 +49,7 @@ public:
         return { gameState.getPlayerX(), gameState.getPlayerY() };
     }
 
-    // Algorithm methods
+    // Algorithm methods - UPDATED with animation support
     void runBFSAlgorithm() {
         if (!gameState.isGameOver()) {
             std::cout << "BFS: Game must be over to run algorithm" << std::endl;
@@ -51,22 +57,33 @@ public:
         }
 
         algorithmRunning = true;
-        currentAlgorithm = 1;
+        isAnimating = false; // Don't start automatically
+        currentAlgorithm = 1;  // BFS
 
         const auto& initialState = gameState.getInitialState();
-        algorithmPath = DungeonAlgorithms::bfsSearch(
+        auto result = DungeonAlgorithms::bfsSearch(
             initialState.actualGrid,
             { initialState.playerStartX, initialState.playerStartY },
             { initialState.exitX, initialState.exitY }
         );
 
-        pathLength = algorithmPath.size();
-        nodesExplored = calculateNodesExplored(1);
+        fullAlgorithmPath = result.path;
+        fullExploredNodes = result.exploredNodes;
 
-        std::cout << "BFS path found with " << algorithmPath.size() << " steps" << std::endl;
-        gameState.visualizePath(algorithmPath);
-        reDraw();
+        // Initialize animation state
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;  // 0 = exploring nodes, 1 = showing path
+        animationSpeed = 100; // ms between steps
+
+        std::cout << "BFS path found with " << fullAlgorithmPath.size()
+            << " steps, explored " << fullExploredNodes.size() << " nodes" << std::endl;
+
+        // Set up initial visualization (show player at start, exit at exit)
+        setupAlgorithmVisualization();
     }
+
+
 
     void runDFSAlgorithm() {
         if (!gameState.isGameOver()) {
@@ -75,21 +92,32 @@ public:
         }
 
         algorithmRunning = true;
-        currentAlgorithm = 2;
+        isAnimating = true;
+        currentAlgorithm = 2;  // DFS
 
         const auto& initialState = gameState.getInitialState();
-        algorithmPath = DungeonAlgorithms::dfsSearch(
+        auto result = DungeonAlgorithms::dfsSearch(
             initialState.actualGrid,
             { initialState.playerStartX, initialState.playerStartY },
             { initialState.exitX, initialState.exitY }
         );
 
-        pathLength = algorithmPath.size();
-        nodesExplored = calculateNodesExplored(2);
+        fullAlgorithmPath = result.path;
+        fullExploredNodes = result.exploredNodes;
 
-        std::cout << "DFS path found with " << algorithmPath.size() << " steps" << std::endl;
-        gameState.visualizePath(algorithmPath);
-        reDraw();
+        // Initialize animation state
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+        animationSpeed = 100;
+
+        std::cout << "DFS path found with " << fullAlgorithmPath.size()
+            << " steps, explored " << fullExploredNodes.size() << " nodes" << std::endl;
+
+        animationStartTime = std::chrono::steady_clock::now();
+        lastAnimationTime = animationStartTime;
+
+        setupAlgorithmVisualization();
     }
 
     void runDijkstraAlgorithm() {
@@ -99,21 +127,32 @@ public:
         }
 
         algorithmRunning = true;
-        currentAlgorithm = 3;
+        isAnimating = true;
+        currentAlgorithm = 3;  // Dijkstra/UCS
 
         const auto& initialState = gameState.getInitialState();
-        algorithmPath = DungeonAlgorithms::dijkstraSearch(
+        auto result = DungeonAlgorithms::dijkstraSearch(
             initialState.actualGrid,
             { initialState.playerStartX, initialState.playerStartY },
             { initialState.exitX, initialState.exitY }
         );
 
-        pathLength = algorithmPath.size();
-        nodesExplored = calculateNodesExplored(3);
+        fullAlgorithmPath = result.path;
+        fullExploredNodes = result.exploredNodes;
 
-        std::cout << "UCS path found with " << algorithmPath.size() << " steps" << std::endl;
-        gameState.visualizePath(algorithmPath);
-        reDraw();
+        // Initialize animation state
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+        animationSpeed = 100;
+
+        std::cout << "UCS path found with " << fullAlgorithmPath.size()
+            << " steps, explored " << fullExploredNodes.size() << " nodes" << std::endl;
+
+        animationStartTime = std::chrono::steady_clock::now();
+        lastAnimationTime = animationStartTime;
+
+        setupAlgorithmVisualization();
     }
 
     void runAStarAlgorithm() {
@@ -123,21 +162,32 @@ public:
         }
 
         algorithmRunning = true;
-        currentAlgorithm = 4;
+        isAnimating = true;
+        currentAlgorithm = 4;  // A*
 
         const auto& initialState = gameState.getInitialState();
-        algorithmPath = DungeonAlgorithms::aStarSearch(
+        auto result = DungeonAlgorithms::aStarSearch(
             initialState.actualGrid,
             { initialState.playerStartX, initialState.playerStartY },
             { initialState.exitX, initialState.exitY }
         );
 
-        pathLength = algorithmPath.size();
-        nodesExplored = calculateNodesExplored(4);
+        fullAlgorithmPath = result.path;
+        fullExploredNodes = result.exploredNodes;
 
-        std::cout << "A* path found with " << algorithmPath.size() << " steps" << std::endl;
-        gameState.visualizePath(algorithmPath);
-        reDraw();
+        // Initialize animation state
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+        animationSpeed = 100;
+
+        std::cout << "A* path found with " << fullAlgorithmPath.size()
+            << " steps, explored " << fullExploredNodes.size() << " nodes" << std::endl;
+
+        animationStartTime = std::chrono::steady_clock::now();
+        lastAnimationTime = animationStartTime;
+
+        setupAlgorithmVisualization();
     }
 
     void runGreedyAlgorithm() {
@@ -147,32 +197,201 @@ public:
         }
 
         algorithmRunning = true;
-        currentAlgorithm = 5;
+        isAnimating = true;
+        currentAlgorithm = 5;  // Greedy
 
         const auto& initialState = gameState.getInitialState();
-        algorithmPath = DungeonAlgorithms::greedySearch(
+        auto result = DungeonAlgorithms::greedySearch(
             initialState.actualGrid,
             { initialState.playerStartX, initialState.playerStartY },
             { initialState.exitX, initialState.exitY }
         );
 
-        pathLength = algorithmPath.size();
-        nodesExplored = calculateNodesExplored(5);
+        fullAlgorithmPath = result.path;
+        fullExploredNodes = result.exploredNodes;
 
-        std::cout << "Greedy path found with " << algorithmPath.size() << " steps" << std::endl;
-        gameState.visualizePath(algorithmPath);
-        reDraw();
+        // Initialize animation state
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+        animationSpeed = 100;
+
+        std::cout << "Greedy path found with " << fullAlgorithmPath.size()
+            << " steps, explored " << fullExploredNodes.size() << " nodes" << std::endl;
+
+        animationStartTime = std::chrono::steady_clock::now();
+        lastAnimationTime = animationStartTime;
+
+        setupAlgorithmVisualization();
+    }
+
+    // Animation control methods
+    void startAnimation() {
+        if (algorithmRunning && !isAnimating) {
+            isAnimating = true;
+            lastAnimationTime = std::chrono::steady_clock::now();
+            std::cout << "Animation started" << std::endl;
+            reDraw();
+        }
+    }
+
+    void stopAnimation() {
+        isAnimating = false;
+        std::cout << "Animation stopped" << std::endl;
+    }
+
+    void pauseAnimation() {
+        if (algorithmRunning && isAnimating) {
+            isAnimating = false;
+            std::cout << "Animation paused" << std::endl;
+            reDraw();
+        }
+    }
+
+    void stepAnimation() {
+        if (algorithmRunning) {
+            if (animationPhase == 0) {
+                // Step through explored nodes
+                if (currentExploredIndex < fullExploredNodes.size()) {
+                    currentExploredIndex++;
+                }
+                else {
+                    animationPhase = 1; // Move to path animation
+                    std::cout << "Switching to path animation" << std::endl;
+                }
+            }
+            else if (animationPhase == 1) {
+                // Step through path
+                if (currentPathIndex < fullAlgorithmPath.size()) {
+                    currentPathIndex++;
+                }
+                else {
+                    // Animation complete
+                    std::cout << "Animation complete" << std::endl;
+                }
+            }
+            reDraw();
+        }
+    }
+
+
+    void updateAnimation() {
+        if (!isAnimating || !algorithmRunning) return;
+
+        auto currentTime = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            currentTime - lastAnimationTime).count();
+
+        // Update animation based on elapsed time
+        if (elapsed >= animationSpeed) {
+            if (animationPhase == 0) {
+                // Animate explored nodes
+                if (currentExploredIndex < fullExploredNodes.size()) {
+                    currentExploredIndex++;
+                    lastAnimationTime = currentTime;
+                    reDraw();
+                }
+                else {
+                    animationPhase = 1; // Switch to path animation
+                    lastAnimationTime = currentTime;
+                }
+            }
+            else if (animationPhase == 1) {
+                // Animate path
+                if (currentPathIndex < fullAlgorithmPath.size()) {
+                    currentPathIndex++;
+                    lastAnimationTime = currentTime;
+                    reDraw();
+                }
+                else {
+                    // Animation complete
+                    isAnimating = false;
+                    std::cout << "Animation complete" << std::endl;
+                }
+            }
+        }
     }
 
     void resetAlgorithmVisualization() {
         algorithmRunning = false;
+        isAnimating = false;
         currentAlgorithm = 0;
-        algorithmPath.clear();
-        pathLength = 0;
-        nodesExplored = 0;
+        fullAlgorithmPath.clear();
+        fullExploredNodes.clear();
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+
+        // Reset to current game state
         gameState.resetVisualization();
         std::cout << "Algorithm visualization reset" << std::endl;
         reDraw();
+    }
+
+    // NEW: Toggle explored nodes visibility
+    void toggleExploredNodes() {
+        showExploredNodes = !showExploredNodes;
+        reDraw();
+    }
+
+private:
+    void setupAlgorithmVisualization() {
+        // Set up the base visualization with player at start and exit at exit
+        const auto& initialState = gameState.getInitialState();
+
+        // Reset to initial state for algorithm visualization
+        for (int i = 0; i < GameState::GRID_SIZE; i++) {
+            for (int j = 0; j < GameState::GRID_SIZE; j++) {
+                displayGridForAnimation[i][j] = initialState.actualGrid[i][j];
+            }
+        }
+
+        // Make sure player is at start position for algorithm visualization
+        displayGridForAnimation[initialState.playerStartX][initialState.playerStartY] = GameState::PLAYER;
+        displayGridForAnimation[initialState.exitX][initialState.exitY] = GameState::EXIT;
+
+        reDraw();
+    }
+
+    void updateVisualization() {
+        const auto& initialState = gameState.getInitialState();
+
+        // Copy initial state
+        for (int i = 0; i < GameState::GRID_SIZE; i++) {
+            for (int j = 0; j < GameState::GRID_SIZE; j++) {
+                displayGridForAnimation[i][j] = initialState.actualGrid[i][j];
+            }
+        }
+
+        // Add explored nodes
+        if (showExploredNodes) {
+            for (int i = 0; i < currentExploredIndex && i < fullExploredNodes.size(); i++) {
+                int x = fullExploredNodes[i].first;
+                int y = fullExploredNodes[i].second;
+                // Don't overwrite start, exit, or obstacles
+                if (!(x == initialState.playerStartX && y == initialState.playerStartY) &&
+                    !(x == initialState.exitX && y == initialState.exitY)) {
+                    int cellType = initialState.actualGrid[x][y];
+                    if (cellType < GameState::REWARD || cellType > GameState::MINE) {
+                        displayGridForAnimation[x][y] = GameState::EXPLORED_NODE;
+                    }
+                }
+            }
+        }
+
+        // Add path nodes
+        for (int i = 0; i < currentPathIndex && i < fullAlgorithmPath.size(); i++) {
+            int x = fullAlgorithmPath[i].first;
+            int y = fullAlgorithmPath[i].second;
+            if (!(x == initialState.playerStartX && y == initialState.playerStartY) &&
+                !(x == initialState.exitX && y == initialState.exitY)) {
+                displayGridForAnimation[x][y] = GameState::PATH_VISUAL;
+            }
+        }
+
+        // Always show player at start and exit at exit
+        displayGridForAnimation[initialState.playerStartX][initialState.playerStartY] = GameState::PLAYER;
+        displayGridForAnimation[initialState.exitX][initialState.exitY] = GameState::EXIT;
     }
 
 protected:
@@ -218,50 +437,85 @@ protected:
                 return true;
             }
 
+            // Animation control keys - updated for new behavior
+            if (ch == 'p' || ch == 'P') {
+                if (algorithmRunning) {
+                    if (isAnimating) {
+                        pauseAnimation();
+                    }
+                    else {
+                        startAnimation();
+                    }
+                }
+                return true;
+            }
+
+            if (ch == 't' || ch == 'T') {
+                if (algorithmRunning && !isAnimating) {  // Only step when paused
+                    stepAnimation();
+                }
+                return true;
+            }
+
             // Algorithm triggers (only when game is over)
-            switch (ch) {
-            case 'a': case 'A':
-                if (!gameState.isGameOver()) {
-                    // Movement left
+            if (gameState.isGameOver()) {
+                switch (ch) {
+                case 'a': case 'A':
+                    runAStarAlgorithm();
+                    return true;
+                case 'd': case 'D':
+                    runDFSAlgorithm();
+                    return true;
+                case '1': case 'b': case 'B':
+                    runBFSAlgorithm();
+                    return true;
+                case '2':
+                    runDFSAlgorithm();
+                    return true;
+                case '3': case 'j': case 'J':
+                    runDijkstraAlgorithm();
+                    return true;
+                case '4':
+                    runAStarAlgorithm();
+                    return true;
+                case '5': case 'g': case 'G':
+                    runGreedyAlgorithm();
+                    return true;
+                }
+            }
+            else {
+                // Movement keys when game is not over
+                if (ch == 'a' || ch == 'A') {
                     bool moved = gameState.movePlayer(gameState.getPlayerX() - 1, gameState.getPlayerY());
                     if (moved) reDraw();
+                    return true;
                 }
-                else {
-                    // A* algorithm
-                    runAStarAlgorithm();
-                }
-                return true;
-            case 'd': case 'D':
-                if (!gameState.isGameOver()) {
-                    // Movement right
+                if (ch == 'd' || ch == 'D') {
                     bool moved = gameState.movePlayer(gameState.getPlayerX() + 1, gameState.getPlayerY());
                     if (moved) reDraw();
+                    return true;
                 }
-                else {
-                    // DFS algorithm
-                    runDFSAlgorithm();
-                }
-                return true;
-            case '1': case 'b': case 'B':
-                runBFSAlgorithm();
-                return true;
-            case '2':
-                runDFSAlgorithm();
-                return true;
-            case '3': case 'j': case 'J':
-                runDijkstraAlgorithm();
-                return true;
-            case '4':
-                runAStarAlgorithm();
-                return true;
-            case '5': case 'g': case 'G':
-                runGreedyAlgorithm();
-                return true;
+            }
+
+            switch (ch) {
             case 'r': case 'R':
                 resetAlgorithmVisualization();
                 return true;
-            case 'n': case 'N':
+            case 'n': case 'N':  // New game shortcut for testing
                 resetGame();
+                return true;
+            case 'e': case 'E':  // Toggle explored nodes
+                toggleExploredNodes();
+                return true;
+            case ' ':  // Space bar to toggle play/pause
+                if (algorithmRunning) {
+                    if (isAnimating) {
+                        pauseAnimation();
+                    }
+                    else {
+                        startAnimation();
+                    }
+                }
                 return true;
             }
         }
@@ -301,10 +555,28 @@ protected:
                     return;
                 }
             }
-            
+
             // Close dropdown if clicked elsewhere
             dropdownExpanded = false;
             reDraw();
+            return;
+        }
+
+        // Check if clicked on "Start Animation" button
+        if (startButtonRect.contains(clickPos) && algorithmRunning && !isAnimating) {
+            startAnimation();  // Start animation from beginning
+            return;
+        }
+
+        // Check if clicked on "Pause Animation" button
+        if (pauseButtonRect.contains(clickPos) && algorithmRunning && isAnimating) {
+            pauseAnimation();  // Stop animation where it is
+            return;
+        }
+
+        // Check if clicked on "Step" button
+        if (stepButtonRect.contains(clickPos) && algorithmRunning) {
+            stepAnimation();  // Step forward one frame
             return;
         }
 
@@ -321,17 +593,86 @@ protected:
         }
     }
 
+
     void resetGame() {
+        // If player has ever reached the exit, must check requirement before allowing new dungeon
+        if (gameState.hasEverReachedExit() && !gameState.hasMetRewardRequirement()) {
+            // Didn't meet requirement - show alert and reset to try again
+            showAlert("Insufficient Rewards!",
+                "You need to collect at least 40 points in rewards (4 rewards) to generate a new dungeon. Try again!");
+            gameState.resetPlayerPosition();
+            reDraw();
+            return;
+        }
+
+        // Requirements met or never reached exit yet - generate new dungeon
+        // Create new random number generator and game state
         rng = std::mt19937(std::random_device{}());
         gameState = GameState(rng);
+
+        // Re-setup the callback for the new game state
+        gameState.setGameEventCallback([this](const std::string& event, int value) {
+            handleGameEvent(event, value);
+            });
+
         algorithmRunning = false;
+        isAnimating = false;
         currentAlgorithm = 0;
-        algorithmPath.clear();
-        pathLength = 0;
-        nodesExplored = 0;
+        fullAlgorithmPath.clear();
+        fullExploredNodes.clear();
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
         dropdownExpanded = false;
+        showExploredNodes = true;
         std::cout << "New game started" << std::endl;
         reDraw();
+    }
+
+    // Handle game events (like mine hits) - KEEPING ORIGINAL VERSION WITH QuestionsPopUp
+    void handleGameEvent(const std::string& event, int value) {
+        if (event == "mine") {
+            // Create dialog with random question using factory method
+            DialogLogin* dlg = DialogLogin::createWithRandomQuestion(this);
+
+            dlg->openModal([this, value](gui::Dialog* pDlg) {
+                DialogLogin* questionDlg = (DialogLogin*)pDlg;
+
+                if (questionDlg->isAnswerCorrect()) {
+                    td::String message;
+                    message.format("Correct! You avoid losing %d gold!", value);
+                    gui::Alert::show("Mine Avoided!", message);
+                }
+                else {
+                    td::String message;
+                    message.format("Wrong answer! You lose %d gold.", value);
+                    gui::Alert::show("Mine Hit!", message);
+                }
+                });
+        }
+        else if (event == "reward") {
+            td::String message;
+            message.format("You found %d gold!\nTotal gold: %d", value, gameState.getGold());
+            gui::Alert::show("Reward Found!", message);
+        }
+        else if (event == "bandit") {
+            td::String message;
+            message.format("A bandit stole half your gold!\nRemaining gold: %d", gameState.getGold());
+            gui::Alert::show("Bandit Attack!", message);
+        }
+        else if (event == "exit") {
+            td::String message;
+            message.format("You escaped the dungeon!\nFinal gold: %d", gameState.getGold());
+            gui::Alert::show("You Win!", message);
+        }
+        else if (event == "exit_insufficient") {
+            td::String message;
+            message.format("Insufficient Rewards!\n\nYou collected %d rewards (need 4 for 40 points).\nThe dungeon will reset - try again!", value);
+            gui::Alert::show("Cannot Generate New Dungeon", message);
+            // Auto-reset after showing alert
+            gameState.resetPlayerPosition();
+            reDraw();
+        }
     }
 
     void onResize(const gui::Size& newSize) override {
@@ -353,6 +694,16 @@ protected:
     }
 
     void onDraw(const gui::Rect& rect) override {
+        // Update animation before drawing
+        if (algorithmRunning && isAnimating) {
+            updateAnimation();
+        }
+
+        // Update visualization if algorithm is running
+        if (algorithmRunning) {
+            updateVisualization();
+        }
+
         // Draw background
         gui::Shape bg;
         bg.createRect(rect);
@@ -366,19 +717,6 @@ protected:
     }
 
 private:
-    // Helper function to calculate nodes explored (estimation)
-    int calculateNodesExplored(int algorithmType) {
-        // This is a simplified estimation
-        switch (algorithmType) {
-        case 1: return pathLength * 2;      // BFS explores more
-        case 2: return pathLength * 3;      // DFS can explore many dead ends
-        case 3: return pathLength * 2;      // Dijkstra similar to BFS
-        case 4: return pathLength;          // A* is efficient
-        case 5: return pathLength;          // Greedy is fast
-        default: return 0;
-        }
-    }
-
     void drawGameGrid() {
         const int GRID_SIZE = GameState::GRID_SIZE;
 
@@ -432,10 +770,17 @@ private:
             line.drawWire(td::ColorID::Gray);
         }
 
-        // Draw game elements
+        // Draw cells - use algorithm visualization if running, otherwise use game state
         for (int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
-                int cellType = gameState.getDisplayCell(i, j);
+                int cellType;
+                if (algorithmRunning) {
+                    cellType = displayGridForAnimation[i][j];
+                }
+                else {
+                    cellType = gameState.getDisplayCell(i, j);
+                }
+
                 if (cellType != GameState::EMPTY) {
                     drawCellContent(gridStartX + i * cellSize,
                         gridStartY + j * cellSize,
@@ -443,6 +788,38 @@ private:
                 }
             }
         }
+
+        // Draw animation indicator if animating
+        if (isAnimating) {
+            drawAnimationIndicator(gridStartX, gridStartY, gridAreaSize);
+        }
+    }
+
+    void drawAnimationIndicator(gui::CoordType x, gui::CoordType y, gui::CoordType size) {
+        // Draw a pulsing border around the grid to indicate animation is running
+        static float pulse = 0.0f;
+        pulse += 0.1f;
+        if (pulse > 2 * 3.14159f) pulse = 0.0f;
+
+        gui::Shape border;
+        border.createRect(gui::Rect(x, y, x + size, y + size));
+        border.drawWire(td::ColorID::Yellow, 3.0f);
+
+        // Draw animation status text
+        std::string status;
+        if (animationPhase == 0) {
+            status = "Exploring: " + std::to_string(currentExploredIndex) + "/" + std::to_string(fullExploredNodes.size());
+        }
+        else {
+            status = "Path: " + std::to_string(currentPathIndex) + "/" + std::to_string(fullAlgorithmPath.size());
+        }
+
+        gui::DrawableString::draw(status.c_str(), status.length(),
+            gui::Rect(x, y - 25, x + size, y),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::Yellow,
+            td::TextAlignment::Center,
+            td::VAlignment::Bottom);
     }
 
     void drawCellContent(gui::CoordType x, gui::CoordType y,
@@ -451,43 +828,83 @@ private:
         gui::Rect cellRect(x + margin, y + margin,
             x + size - margin, y + size - margin);
 
+        // Handle explored nodes
+        if (cellType == GameState::EXPLORED_NODE && showExploredNodes) {
+            gui::Shape exploredShape;
+            exploredShape.createRect(cellRect);
+            exploredShape.drawFill(td::ColorID::LightBlue);
+
+            // Draw a smaller inner shape for better visibility
+            gui::Shape innerShape;
+            gui::Rect innerRect(x + margin + 2, y + margin + 2,
+                x + size - margin - 2, y + size - margin - 2);
+            innerShape.createRect(innerRect);
+            innerShape.drawFill(td::ColorID::SkyBlue);
+            return;
+        }
+
+        // Handle algorithm path
         if (cellType == GameState::PATH_VISUAL) {
             gui::Shape pathShape;
             pathShape.createRect(cellRect);
             pathShape.drawFill(td::ColorID::Purple);
+
             try {
                 imgPath.draw(cellRect);
             }
-            catch (...) {}
+            catch (...) {
+                // No path image, just use colored square
+            }
             return;
         }
 
         if (imagesLoaded) {
             try {
                 switch (cellType) {
-                case GameState::PLAYER: imgPlayer.draw(cellRect); break;
-                case GameState::REWARD: imgReward.draw(cellRect); break;
-                case GameState::BANDIT: imgBandit.draw(cellRect); break;
-                case GameState::MINE: imgMine.draw(cellRect); break;
-                case GameState::EXIT: imgExit.draw(cellRect); break;
+                case GameState::PLAYER:
+                    imgPlayer.draw(cellRect);
+                    break;
+                case GameState::REWARD:
+                    imgReward.draw(cellRect);
+                    break;
+                case GameState::BANDIT:
+                    imgBandit.draw(cellRect);
+                    break;
+                case GameState::MINE:
+                    imgMine.draw(cellRect);
+                    break;
+                case GameState::EXIT:
+                    imgExit.draw(cellRect);
+                    break;
                 }
                 return;
             }
             catch (...) {
+                // If drawing fails, fall back to colored square
                 imagesLoaded = false;
             }
         }
 
-        // Fallback to colored squares
+        // Fall back to colored square
         gui::Shape cellShape;
         cellShape.createRect(cellRect);
 
         switch (cellType) {
-        case GameState::PLAYER: cellShape.drawFill(td::ColorID::Green); break;
-        case GameState::REWARD: cellShape.drawFill(td::ColorID::Yellow); break;
-        case GameState::BANDIT: cellShape.drawFill(td::ColorID::Blue); break;
-        case GameState::MINE: cellShape.drawFill(td::ColorID::Red); break;
-        case GameState::EXIT: cellShape.drawFill(td::ColorID::White); break;
+        case GameState::PLAYER:
+            cellShape.drawFill(td::ColorID::Green);
+            break;
+        case GameState::REWARD:
+            cellShape.drawFill(td::ColorID::Yellow);
+            break;
+        case GameState::BANDIT:
+            cellShape.drawFill(td::ColorID::Blue);
+            break;
+        case GameState::MINE:
+            cellShape.drawFill(td::ColorID::Red);
+            break;
+        case GameState::EXIT:
+            cellShape.drawFill(td::ColorID::White);
+            break;
         }
     }
 
@@ -509,7 +926,7 @@ private:
         drawStatisticsPanel(panelX, currentY, panelWidth);
         currentY += 165;
 
-        // Control buttons
+        // Control buttons - UPDATED with animation controls
         drawControlButtons(panelX, currentY, panelWidth);
         currentY += 190;
 
@@ -518,7 +935,7 @@ private:
 
         // Draw dropdown LAST so it appears on top of everything
         drawAlgorithmDropdown(panelX, dropdownY, panelWidth);
-        
+
         // Draw dropdown menu AFTER dropdown if expanded
         if (dropdownExpanded) {
             drawDropdownMenu(panelX, dropdownY + 53, panelWidth);
@@ -538,12 +955,12 @@ private:
         // Store dropdown rectangle for click detection
         dropdownRect = gui::Rect(x, y, x + width, y + 50);
 
-        // Dropdown background - gray-green like grid
+        // Dropdown background
         gui::Shape selectorBg;
         selectorBg.createRoundedRect(dropdownRect, 6);
         selectorBg.drawFill(td::ColorID::Moss);
 
-        // Red outline
+        // Outline
         gui::Shape selectorBorder;
         selectorBorder.createRoundedRect(dropdownRect, 6);
         selectorBorder.drawWire(td::ColorID::LightGreen, 2);
@@ -587,13 +1004,13 @@ private:
         gui::CoordType itemHeight = 45;
         gui::CoordType menuHeight = 5 * itemHeight;
 
-        // Menu background - gray-green
+        // Menu background
         gui::Shape menuBg;
         gui::Rect menuRect(x, y, x + width, y + menuHeight);
         menuBg.createRoundedRect(menuRect, 6);
         menuBg.drawFill(td::ColorID::Moss);
 
-        // Red border
+        // Border
         gui::Shape menuBorder;
         menuBorder.createRoundedRect(menuRect, 6);
         menuBorder.drawWire(td::ColorID::LightGreen, 2);
@@ -603,7 +1020,7 @@ private:
             gui::CoordType itemY = y + i * itemHeight;
             dropdownItemRects[i] = gui::Rect(x, itemY, x + width, itemY + itemHeight);
 
-            // Highlight if selected - with red
+            // Highlight if selected
             if (i + 1 == currentAlgorithm) {
                 gui::Shape highlight;
                 highlight.createRect(gui::Rect(x + 3, itemY + 2, x + width - 3, itemY + itemHeight - 2));
@@ -620,13 +1037,13 @@ private:
     }
 
     void drawStatisticsPanel(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
-        // Stats container - gray-green
+        // Stats container
         gui::Shape statsBg;
         gui::Rect statsRect(x, y, x + width, y + 150);
         statsBg.createRoundedRect(statsRect, 6);
         statsBg.drawFill(td::ColorID::Moss);
 
-        // Red border
+        // Border
         gui::Shape statsBorder;
         statsBorder.createRoundedRect(statsRect, 6);
         statsBorder.drawWire(td::ColorID::LightGreen, 2);
@@ -634,14 +1051,34 @@ private:
         gui::CoordType currentY = y + 20;
 
         // Gold and Status row
+        std::string status;
+        if (isAnimating) {
+            status = "Animating";
+        }
+        else if (algorithmRunning) {
+            status = "Paused";
+        }
+        else {
+            status = gameState.isGameOver() ?
+                (gameState.isGameWon() ? "Reached the Exit!" : "Game Over") : "Playing";
+        }
+
         drawStatRow("Current Gold", std::to_string(gameState.getGold()),
-            "Status", gameState.isGameOver() ? (gameState.isGameWon() ? "Reached the Exit!" : "Game Over") : "Playing",
+            "Status", status,
             x + 20, currentY, width - 40);
         currentY += 65;
 
-        // Path Length and Nodes Explored row
-        drawStatRow("Path Length", std::to_string(pathLength),
-            "Nodes Explored", std::to_string(nodesExplored),
+        // Path Progress and Nodes Explored row
+        std::string pathProgress = algorithmRunning ?
+            std::to_string(currentPathIndex) + "/" + std::to_string(fullAlgorithmPath.size()) :
+            "0";
+
+        std::string exploredProgress = algorithmRunning ?
+            std::to_string(currentExploredIndex) + "/" + std::to_string(fullExploredNodes.size()) :
+            "0";
+
+        drawStatRow("Path Progress", pathProgress,
+            "Explored Nodes", exploredProgress,
             x + 20, currentY, width - 40);
     }
 
@@ -650,7 +1087,7 @@ private:
         gui::CoordType x, gui::CoordType y, gui::CoordType width) {
         gui::CoordType halfWidth = width / 2;
 
-        // Left stat - more spacing
+        // Left stat
         gui::DrawableString::draw(label1, strlen(label1),
             gui::Rect(x, y, x + halfWidth - 15, y + 22),
             gui::Font::ID::SystemNormal,
@@ -665,7 +1102,7 @@ private:
             td::TextAlignment::Left,
             td::VAlignment::Center);
 
-        // Right stat - more spacing
+        // Right stat
         gui::DrawableString::draw(label2, strlen(label2),
             gui::Rect(x + halfWidth + 15, y, x + width, y + 22),
             gui::Font::ID::SystemNormal,
@@ -686,27 +1123,32 @@ private:
         gui::CoordType buttonSpacing = 12;
         gui::CoordType currentY = y;
 
-        // Row 1: START and PAUSE - gray-green
+        // Row 1: START and PAUSE
+        startButtonRect = gui::Rect(x, currentY, x + width / 2 - 6, currentY + buttonHeight);
         drawRoundedButton("START", x, currentY, width / 2 - 6, buttonHeight,
-            td::ColorID::Moss, false, gui::Rect());
+            td::ColorID::Moss, algorithmRunning && !isAnimating, startButtonRect);
+
+        pauseButtonRect = gui::Rect(x + width / 2 + 6, currentY, x + width, currentY + buttonHeight);
         drawRoundedButton("PAUSE", x + width / 2 + 6, currentY, width / 2 - 6, buttonHeight,
-            td::ColorID::Moss, false, gui::Rect());
+            td::ColorID::Moss, algorithmRunning && isAnimating, pauseButtonRect);
         currentY += buttonHeight + buttonSpacing;
 
-        // Row 2: STEP and RESET - gray-green
+        // Row 2: STEP and RESET
+        stepButtonRect = gui::Rect(x, currentY, x + width / 2 - 6, currentY + buttonHeight);
         drawRoundedButton("STEP", x, currentY, width / 2 - 6, buttonHeight,
-            td::ColorID::Moss, false, gui::Rect());
+            td::ColorID::Moss, algorithmRunning && !isAnimating, stepButtonRect);
 
-        resetButtonRect = gui::Rect(x + width / 2 + 6, currentY,
-            x + width, currentY + buttonHeight);
+        resetButtonRect = gui::Rect(x + width / 2 + 6, currentY, x + width, currentY + buttonHeight);
         drawRoundedButton("RESET", x + width / 2 + 6, currentY, width / 2 - 6, buttonHeight,
             td::ColorID::Moss, algorithmRunning, resetButtonRect);
         currentY += buttonHeight + buttonSpacing;
 
-        // Row 3: GENERATE NEW GAME - Dark Red
+        // Row 3: GENERATE NEW GAME
         generateNewGameRect = gui::Rect(x, currentY, x + width, currentY + buttonHeight);
         drawRoundedButton("GENERATE NEW DUNGEON", x, currentY, width, buttonHeight,
-            td::ColorID::Copper,true, generateNewGameRect);
+            td::ColorID::Copper, true, generateNewGameRect);
+        currentY += buttonHeight + buttonSpacing;
+
     }
 
     void drawRoundedButton(const char* label, gui::CoordType x, gui::CoordType y,
@@ -722,7 +1164,7 @@ private:
         buttonBorder.createRoundedRect(buttonRect, 6);
         buttonBorder.drawWire(enabled ? td::ColorID::Gray : td::ColorID::DarkGray, 1);
 
-        // Always white text
+        // Text
         gui::DrawableString::draw(label, strlen(label),
             gui::Rect(x, y, x + width, y + height),
             gui::Font::ID::SystemNormal,
@@ -742,13 +1184,13 @@ private:
 
         y += 35;
 
-        // Table background - gray-green
+        // Table background
         gui::Shape tableBg;
         gui::Rect tableRect(x, y, x + width, y + 145);
         tableBg.createRoundedRect(tableRect, 6);
         tableBg.drawFill(td::ColorID::Moss);
 
-        // Red border
+        // Border
         gui::Shape tableBorder;
         tableBorder.createRoundedRect(tableRect, 6);
         tableBorder.drawWire(td::ColorID::LightGreen, 2);
@@ -757,10 +1199,19 @@ private:
         gui::CoordType headerY = y + 15;
         drawTableHeader(x + 15, headerY, width - 30);
 
-        // Message
-        const char* msg = "Run algorithms to see metrics";
-        gui::DrawableString::draw(msg, strlen(msg),
+        // Animation speed control message
+        const char* speedMsg = "Animation Speed: Medium (100ms/step)";
+        gui::DrawableString::draw(speedMsg, strlen(speedMsg),
             gui::Rect(x + 20, headerY + 40, x + width - 20, headerY + 95),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::LightGray,
+            td::TextAlignment::Center,
+            td::VAlignment::Center);
+
+        // Controls hint
+        const char* controls = "Press SPACE to play/pause, T to step (when paused)";
+        gui::DrawableString::draw(controls, strlen(controls),
+            gui::Rect(x + 20, headerY + 100, x + width - 20, headerY + 130),
             gui::Font::ID::SystemSmaller,
             td::ColorID::LightGray,
             td::TextAlignment::Center,
@@ -788,7 +1239,10 @@ private:
     }
 
 private:
+    // IMPORTANT: rng MUST be declared BEFORE gameState
     std::mt19937 rng;
+
+    // Game state - depends on rng, so must come after
     GameState gameState;
 
     // Drawing areas
@@ -815,15 +1269,32 @@ private:
 
     // Algorithm execution state
     bool algorithmRunning = false;
-    std::vector<std::pair<int, int>> algorithmPath;
-    int currentAlgorithm = 0;
-    int pathLength = 0;
-    int nodesExplored = 0;
+    std::vector<std::pair<int, int>> fullAlgorithmPath;
+    std::vector<std::pair<int, int>> fullExploredNodes;
+    int currentAlgorithm = 0;  // 0=none, 1=BFS, 2=DFS, 3=Dijkstra, 4=A*, 5=Greedy
+
+    // Animation state
+    bool isAnimating = false;
+    int currentExploredIndex = 0;
+    int currentPathIndex = 0;
+    int animationPhase = 0;  // 0 = exploring nodes, 1 = showing path
+    int animationSpeed = 50; // ms between steps
+    std::chrono::steady_clock::time_point animationStartTime;
+    std::chrono::steady_clock::time_point lastAnimationTime;
+
+    // Toggle for explored nodes visibility
+    bool showExploredNodes = true;
     bool dropdownExpanded = false;
+
+    // Separate display grid for algorithm visualization
+    int displayGridForAnimation[GameState::GRID_SIZE][GameState::GRID_SIZE];
 
     // Button rectangles for click detection
     gui::Rect dropdownRect;
     gui::Rect dropdownItemRects[5];
     gui::Rect generateNewGameRect;
     gui::Rect resetButtonRect;
+    gui::Rect startButtonRect;
+    gui::Rect pauseButtonRect;
+    gui::Rect stepButtonRect;
 };
