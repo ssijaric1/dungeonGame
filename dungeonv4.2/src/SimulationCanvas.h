@@ -571,6 +571,13 @@ protected:
     void onPrimaryButtonPressed(const gui::InputDevice& inputDevice) override {
         gui::Point clickPos = inputDevice.getModelPoint();
 
+        // === SLIDER INTERACTION ===
+        if (sliderKnobRect.contains(clickPos) || sliderTrackRect.contains(clickPos)) {
+            isDraggingSlider = true;
+            updateSliderFromClick(clickPos);
+            return;
+        }
+
         // Check if clicked on dropdown
         if (dropdownRect.contains(clickPos)) {
             dropdownExpanded = !dropdownExpanded;
@@ -637,6 +644,17 @@ protected:
             resetAlgorithmVisualization();
             return;
         }
+    }
+
+    void onPrimaryButtonDragged(const gui::InputDevice& inputDevice) {
+        if (isDraggingSlider) {
+            gui::Point dragPos = inputDevice.getModelPoint();
+            updateSliderFromClick(dragPos);
+        }
+    }
+
+    void onPrimaryButtonReleased(const gui::InputDevice& inputDevice) override {
+        isDraggingSlider = false;
     }
 
 
@@ -983,6 +1001,11 @@ private:
         gui::CoordType panelWidth = rightZoneWidth;
         gui::CoordType currentY = panelY + 15;
 
+        // === ANIMATION SPEED SLIDER (at very top) ===
+        drawAnimationSpeedSlider(panelX, currentY, panelWidth);
+        currentY += 80;  // Reserve space for slider section
+
+
         // Title
         drawSectionTitle("Select Algorithm:", panelX, currentY, panelWidth);
         currentY += 45;
@@ -1244,6 +1267,76 @@ private:
             td::VAlignment::Center);
     }
 
+    void drawAnimationSpeedSlider(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
+        // Title
+        const char* title = "Animation Speed";
+        gui::DrawableString::draw(title, strlen(title),
+            gui::Rect(x, y, x + width, y + 20),
+            gui::Font::ID::SystemNormal,
+            td::ColorID::White,
+            td::TextAlignment::Left,
+            td::VAlignment::Center);
+
+        y += 25;
+
+        // Calculate slider position based on animationSpeed (inverse relationship)
+        // animationSpeed = delay in ms (smaller = faster)
+        // sliderPercent = 0.0 (left/slow) to 1.0 (right/fast)
+        double sliderPercent = 1.0 - (static_cast<double>(animationSpeed) / MAX_ANIMATION_DELAY);
+        if (sliderPercent < 0.0) sliderPercent = 0.0;
+        if (sliderPercent > 1.0) sliderPercent = 1.0;
+
+        gui::CoordType sliderWidth = width - 30;
+        gui::CoordType trackHeight = 6;
+        gui::CoordType knobSize = 20;
+
+        // Draw track
+        sliderTrackRect = gui::Rect(x + 15, y + 12, x + 15 + sliderWidth, y + 12 + trackHeight);
+        gui::Shape track;
+        track.createRoundedRect(sliderTrackRect, 3);
+        track.drawFill(td::ColorID::DarkGray);
+        track.drawWire(td::ColorID::Gray, 1);
+
+        // Calculate knob position
+        gui::CoordType knobX = x + 15 + static_cast<gui::CoordType>(sliderWidth * sliderPercent);
+        sliderKnobRect = gui::Rect(knobX - knobSize / 2, y + 2,
+            knobX + knobSize / 2, y + 22);
+
+        // Draw knob
+        gui::Shape knob;
+        knob.createRoundedRect(sliderKnobRect, knobSize / 2);
+        knob.drawFill(td::ColorID::Moss);
+        knob.drawWire(td::ColorID::LightGreen, 2);
+
+        // Speed indicator text
+        char speedText[64];
+        snprintf(speedText, sizeof(speedText), "%d ms delay", animationSpeed);
+        gui::DrawableString::draw(speedText, strlen(speedText),
+            gui::Rect(x, y + 30, x + width, y + 50),
+            gui::Font::ID::SystemSmaller,
+            td::ColorID::LightGray,
+            td::TextAlignment::Center,
+            td::VAlignment::Center);
+    }
+
+    void updateSliderFromClick(const gui::Point& clickPos) {
+        // Calculate slider percent from click position
+        gui::CoordType sliderWidth = sliderTrackRect.right - sliderTrackRect.left;
+        gui::CoordType clickOffset = clickPos.x - sliderTrackRect.left;
+
+        double sliderPercent = static_cast<double>(clickOffset) / sliderWidth;
+        if (sliderPercent < 0.0) sliderPercent = 0.0;
+        if (sliderPercent > 1.0) sliderPercent = 1.0;
+
+        // Inverse relationship: high percent = low delay (fast)
+        animationSpeed = static_cast<int>(MAX_ANIMATION_DELAY * (1.0 - sliderPercent));
+        if (animationSpeed < 1) animationSpeed = 1;
+
+        std::cout << "Animation speed changed to: " << animationSpeed << "ms" << std::endl;
+        reDraw();
+    }
+
+
 
     void drawComparisonTable(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
         // Title
@@ -1484,4 +1577,10 @@ private:
     gui::Rect startButtonRect;
     gui::Rect pauseButtonRect;
     gui::Rect stepButtonRect;
+
+    // Slider state for animation speed control
+    const int MAX_ANIMATION_DELAY = 500;  // Maximum delay in ms (slowest)
+    gui::Rect sliderTrackRect;
+    gui::Rect sliderKnobRect;
+    bool isDraggingSlider = false;
 };
