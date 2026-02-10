@@ -692,37 +692,45 @@ protected:
                 DialogLogin* questionDlg = (DialogLogin*)pDlg;
 
                 if (questionDlg->isAnswerCorrect()) {
+                    // CORRECT: No penalty
                     td::String message;
                     message.format("Correct! You avoid losing %d gold!", value);
                     gui::Alert::show("Mine Avoided!", message);
                 }
                 else {
+                    // WRONG: Apply penalty now
+                    gameState.applyMinePenalty(); // <--- NEW CALL
+
                     td::String message;
-                    message.format("Wrong answer! You lose %d gold.", value);
+                    message.format("Wrong answer! You lose %d gold.\nRemaining: %d", value, gameState.getGold());
                     gui::Alert::show("Mine Hit!", message);
                 }
+                reDraw(); // Ensure score updates visually
                 });
         }
         else if (event == "reward") {
+            // ... existing code ...
             td::String message;
             message.format("You found %d gold!\nTotal gold: %d", value, gameState.getGold());
             gui::Alert::show("Reward Found!", message);
         }
         else if (event == "bandit") {
+            // ... existing code ...
             td::String message;
             message.format("A bandit stole half your gold!\nRemaining gold: %d", gameState.getGold());
             gui::Alert::show("Bandit Attack!", message);
         }
         else if (event == "exit") {
+            // ... existing code ...
             td::String message;
             message.format("You escaped the dungeon!\nFinal gold: %d", gameState.getGold());
             gui::Alert::show("You Win!", message);
         }
         else if (event == "exit_insufficient") {
+            // ... existing code ...
             td::String message;
             message.format("Insufficient Gold!\n\nYou only had %d gold (need 20 gold).\nThe dungeon will reset - try again!", value);
             gui::Alert::show("Cannot Generate New Dungeon", message);
-            // Auto-reset after showing alert
             gameState.resetPlayerPosition();
             reDraw();
         }

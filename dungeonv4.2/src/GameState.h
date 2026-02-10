@@ -75,6 +75,11 @@ public:
         return EMPTY;
     }
 
+    // NEW FUNCTION: Only called if answer is wrong
+    void applyMinePenalty() {
+        gold = std::max(0, gold - 5);
+    }
+
     // Game actions
     bool movePlayer(int newX, int newY) {
         if (gameOver || newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE)
@@ -110,12 +115,10 @@ public:
             break;
 
         case MINE:
-            gold = std::max(0, gold - 5);
             actualGrid[newX][newY] = PLAYER;
             displayGrid[newX][newY] = MINE;  // Reveal mine
-            if (gameEventCallback) {
-                gameEventCallback("mine", 5);  // 5 gold lost
-            }
+
+            if (gameEventCallback) gameEventCallback("mine", 5);
             break;
 
         case EXIT:
