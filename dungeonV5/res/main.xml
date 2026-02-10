@@ -8,4 +8,11 @@
         <Res id="player" path="Work/Common/Icons/images/player.png"/>
         <Res id="background" path="Work/Common/Icons/images/background.png"/>
     </Images>
+    <Sounds>
+        <Res id="rewardSound" path="Work/Common/Sounds/rewardSound.wav"/>
+        <Res id="mineSound" path="Work/Common/Sounds/mineSound.wav"/>
+        <Res id="banditSound" path="Work/Common/Sounds/banditSound.wav"/>
+        <Res id="exitSound" path="Work/Common/Sounds/exitSound.wav"/>
+        <Res id="noExitSound" path="Work/Common/Sounds/noExitSound.wav"/>
+    </Sounds>
 </res>

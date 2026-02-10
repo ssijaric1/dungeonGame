@@ -7,6 +7,7 @@
 #include <gui/DrawableString.h>
 #include <gui/Image.h>
 #include <gui/Alert.h>
+#include <gui/Sound.h>
 #include <algorithm>
 #include <random>
 #include <ctime>
@@ -28,7 +29,12 @@ public:
         , imgMine(":mine")
         , imgExit(":exit")
         , imgBackground(":background")
-        , imgPath(":path") {
+        , imgPath(":path")
+        , sndReward(":rewardSound")
+        , sndMine(":mineSound")
+        , sndBandit(":banditSound")
+        , sndExit(":exitSound")
+        , sndNoExit(":noExitSound") {
         enableResizeEvent(true);
 
         // Set up game event callbacks
@@ -685,6 +691,9 @@ protected:
     // Handle game events (like mine hits) - KEEPING ORIGINAL VERSION WITH QuestionsPopUp
     void handleGameEvent(const std::string& event, int value) {
         if (event == "mine") {
+            // Play mine sound
+            sndMine.play();
+            
             // Create dialog with random question using factory method
             DialogLogin* dlg = DialogLogin::createWithRandomQuestion(this);
 
@@ -709,24 +718,36 @@ protected:
                 });
         }
         else if (event == "reward") {
+            // Play reward sound
+            sndReward.play();
+            
             // ... existing code ...
             td::String message;
             message.format("You found %d gold!\nTotal gold: %d", value, gameState.getGold());
             gui::Alert::show("Reward Found!", message);
         }
         else if (event == "bandit") {
+            // Play bandit sound
+            sndBandit.play();
+            
             // ... existing code ...
             td::String message;
             message.format("A bandit stole half your gold!\nRemaining gold: %d", gameState.getGold());
             gui::Alert::show("Bandit Attack!", message);
         }
         else if (event == "exit") {
+            // Play exit success sound
+            sndExit.play();
+            
             // ... existing code ...
             td::String message;
             message.format("You escaped the dungeon!\nFinal gold: %d", gameState.getGold());
             gui::Alert::show("You Win!", message);
         }
         else if (event == "exit_insufficient") {
+            // Play no exit sound (insufficient gold)
+            sndNoExit.play();
+            
             // ... existing code ...
             td::String message;
             message.format("Insufficient Gold!\n\nYou only had %d gold (need 20 gold).\nThe dungeon will reset - try again!", value);
@@ -1304,7 +1325,7 @@ private:
         auto animationDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - animationStartTime).count();
         char timeBuffer[64];
-        snprintf(timeBuffer, sizeof(timeBuffer), "%lld ms", animationDuration);
+        snprintf(timeBuffer, sizeof(timeBuffer), "%ld ms", animationDuration);
 
         switch (currentAlgorithm) {
         case 1: // BFS
@@ -1450,6 +1471,13 @@ private:
     gui::Image imgExit;
     gui::Image imgBackground;
     gui::Image imgPath;
+
+    // Game sounds
+    gui::Sound sndReward;
+    gui::Sound sndMine;
+    gui::Sound sndBandit;
+    gui::Sound sndExit;
+    gui::Sound sndNoExit;
 
     bool imagesLoaded = true;
     bool backgroundLoaded = true;
