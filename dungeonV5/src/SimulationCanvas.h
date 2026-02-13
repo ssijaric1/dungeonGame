@@ -19,170 +19,40 @@
 #include "QuestionsPopUp.h"
 
 class SimulationCanvas : public gui::Canvas {
-public:
-    SimulationCanvas()
-        : gui::Canvas({ gui::InputDevice::Event::Keyboard, gui::InputDevice::Event::PrimaryClicks })
-        , rng(std::random_device{}())
-        , gameState(rng)
-        , imgPlayer(":player")
-        , imgReward(":reward")
-        , imgBandit(":bandit")
-        , imgMine(":mine")
-        , imgExit(":exit")
-        , imgBackground(":background")
-        , sndReward(":rewardSound")
-        , sndMine(":mineSound")
-        , sndBandit(":banditSound")
-        , sndExit(":exitSound")
-        , sndNoExit(":noExitSound")
-        , sndSoundtrack(":soundtrack") {
-
-        enableResizeEvent(true);
-        lastAnimationTime = std::chrono::steady_clock::now();
-
-        gameState.setGameEventCallback([this](const std::string& event, int value) {
-            handleGameEvent(event, value);
-            });
-    }
-
-    ~SimulationCanvas() = default;
-
-    bool isGameOver() const { return gameState.isGameOver(); }
-    bool isGameWon() const { return gameState.isGameWon(); }
-    int getGold() const { return gameState.getGold(); }
-
-    std::pair<int, int> getPlayerPosition() const {
-        return { gameState.getPlayerX(), gameState.getPlayerY() };
-    }
-
-    void setAnimationSpeed(int speedMS) { animationSpeed = speedMS; }
-    int getAnimationSpeed() const { return animationSpeed; }
-
-    enum class AlgorithmType { None, BFS, DFS, UCS, AStar, Greedy, MDP };
-
-    void runAlgorithm(AlgorithmType type) {
-        if (!gameState.isGameOver()) return;
-
-        algorithmRunning = true;
-        isAnimating = (type != AlgorithmType::BFS);
-
-        const auto& initialState = gameState.getInitialState();
-        std::pair<int, int> start = { initialState.playerStartX, initialState.playerStartY };
-        std::pair<int, int> exit = { initialState.exitX, initialState.exitY };
-
-        auto searchStart = std::chrono::steady_clock::now();
-
-        DungeonAlgorithms::SearchResult result;
-        if (type == AlgorithmType::BFS)
-            result = DungeonAlgorithms::bfsSearch(initialState.actualGrid, start, exit);
-        else if (type == AlgorithmType::DFS)
-            result = DungeonAlgorithms::dfsSearch(initialState.actualGrid, start, exit);
-        else if (type == AlgorithmType::UCS)
-            result = DungeonAlgorithms::dijkstraSearch(initialState.actualGrid, start, exit);
-        else if (type == AlgorithmType::AStar)
-            result = DungeonAlgorithms::aStarSearch(initialState.actualGrid, start, exit);
-        else if (type == AlgorithmType::Greedy)
-            result = DungeonAlgorithms::greedySearch(initialState.actualGrid, start, exit);
-        else if (type == AlgorithmType::MDP)
-            result = DungeonAlgorithms::mdpSearch(initialState.actualGrid, start, exit, gameState.getGold());
-
-        auto searchEnd = std::chrono::steady_clock::now();
-        algorithmExecTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(searchEnd - searchStart).count();
-
-        fullAlgorithmPath = result.path;
-        fullExploredNodes = result.exploredNodes;
-        currentAlgorithm = static_cast<int>(type);
-
-        lastAnimationTime = std::chrono::steady_clock::now();
-        currentExploredIndex = 0;
-        currentPathIndex = 0;
-        animationPhase = 0;
-
-        setupAlgorithmVisualization();
-    }
-
-    void startAnimation() {
-        if (!algorithmRunning) return;
-        isAnimating = true;
-        lastAnimationTime = std::chrono::steady_clock::now();
-        gui::Canvas::startAnimation();
-        reDraw();
-    }
-
-    void pauseAnimation() {
-        if (!algorithmRunning) return;
-        isAnimating = false;
-        gui::Canvas::stopAnimation();
-        reDraw();
-    }
-
-    void stepAnimation() {
-        if (!algorithmRunning) return;
-
-        if (animationPhase == 0) {
-            if (currentExploredIndex < fullExploredNodes.size())
-                currentExploredIndex++;
-            else
-                animationPhase = 1;
-        }
-        else if (animationPhase == 1) {
-            if (currentPathIndex < fullAlgorithmPath.size())
-                currentPathIndex++;
-        }
-
-        reDraw();
-    }
-
-    void updateAnimation() {
-        if (!isAnimating || !algorithmRunning) return;
-
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAnimationTime).count();
-        if (elapsed < animationSpeed) return;
-
-        if (animationPhase == 0) {
-            if (currentExploredIndex < fullExploredNodes.size()) {
-                currentExploredIndex++;
-                lastAnimationTime = now;
-            }
-            else {
-                animationPhase = 1;
-                lastAnimationTime = now;
-            }
-        }
-        else if (animationPhase == 1) {
-            if (currentPathIndex < fullAlgorithmPath.size()) {
-                currentPathIndex++;
-                lastAnimationTime = now;
-            }
-            else {
-                isAnimating = false;
-                gui::Canvas::stopAnimation();
-            }
-        }
-    }
-
-    void resetAlgorithmVisualization() {
-        algorithmRunning = false;
-        isAnimating = false;
-        currentAlgorithm = 0;
-        algorithmExecTimeUs = 0;
-        fullAlgorithmPath.clear();
-        fullExploredNodes.clear();
-        currentExploredIndex = 0;
-        currentPathIndex = 0;
-        animationPhase = 0;
-
-        gameState.resetVisualization();
-        reDraw();
-    }
-
-    void toggleExploredNodes() {
-        showExploredNodes = !showExploredNodes;
-        reDraw();
-    }
-
 private:
+    enum class AlgorithmType { None, BFS, DFS, UCS, AStar, Greedy, MDP };
+    std::mt19937 rng;
+    GameState gameState;
+
+    gui::CoordType leftZoneLeft = 0, leftZoneTop = 0, leftZoneWidth = 0;
+    gui::CoordType rightZoneLeft = 0, rightZoneTop = 0, rightZoneWidth = 0;
+
+    gui::Image imgPlayer, imgReward, imgBandit, imgMine, imgExit, imgBackground;
+    gui::Sound sndReward, sndMine, sndBandit, sndExit, sndNoExit, sndSoundtrack;
+
+    bool imagesLoaded = true, backgroundLoaded = true, soundtrackPlaying = false;
+
+    bool algorithmRunning = false;
+    int  currentAlgorithm = 0;
+    long long algorithmExecTimeUs = 0;
+    std::vector<std::pair<int, int>> fullAlgorithmPath;
+    std::vector<std::pair<int, int>> fullExploredNodes;
+
+    bool isAnimating = false;
+    int  animationPhase = 0, currentExploredIndex = 0, currentPathIndex = 0;
+    int  animationSpeed = 100;
+    const int MAX_SPEED = 500;
+    std::chrono::steady_clock::time_point lastAnimationTime;
+
+    bool showExploredNodes = true;
+    bool dropdownExpanded = false, speedControlExpanded = false;
+
+    int displayGrid[GameState::GRID_SIZE][GameState::GRID_SIZE];
+
+    gui::Rect dropdownRect, dropdownItemRects[6];
+    gui::Rect speedButtonRect, speedSliderRect;
+    gui::Rect startButtonRect, pauseButtonRect, stepButtonRect, resetButtonRect, generateNewGameRect;
+
 
     static const char* algorithmName(AlgorithmType type) {
         if (type == AlgorithmType::BFS)    return "BFS";
@@ -236,95 +106,6 @@ private:
 
         displayGrid[s.playerStartX][s.playerStartY] = GameState::PLAYER;
         displayGrid[s.exitX][s.exitY] = GameState::EXIT;
-    }
-
-protected:
-
-    bool onKeyPressed(const gui::Key& key) override {
-        if (key.isVirtual()) {
-            gui::Key::Virtual k = key.getVirtual();
-            if (k == gui::Key::Virtual::Right) {
-                if (gameState.movePlayer(gameState.getPlayerX() + 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-            if (k == gui::Key::Virtual::Left) {
-                if (gameState.movePlayer(gameState.getPlayerX() - 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-            if (k == gui::Key::Virtual::Up) {
-                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() - 1)) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-            if (k == gui::Key::Virtual::Down) {
-                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() + 1)) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-        }
-
-        if (key.isASCII()) {
-            char ch = key.getChar();
-            if (ch == 'w' || ch == 'W') {
-                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() - 1)) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-            if (ch == 's' || ch == 'S') {
-                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() + 1)) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-            if (ch == 'a' || ch == 'A') {
-                if (gameState.movePlayer(gameState.getPlayerX() - 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-            if (ch == 'd' || ch == 'D') {
-                if (gameState.movePlayer(gameState.getPlayerX() + 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
-                return true;
-            }
-        }
-
-        return gui::Canvas::onKeyPressed(key);
-    }
-
-    void onPrimaryButtonPressed(const gui::InputDevice& inputDevice) override {
-        gui::Point click = inputDevice.getModelPoint();
-
-        if (speedButtonRect.contains(click)) {
-            speedControlExpanded = !speedControlExpanded;
-            reDraw();
-            return;
-        }
-
-        if (speedControlExpanded && speedSliderRect.contains(click)) {
-            handleSpeedSliderClick(click);
-            return;
-        }
-
-        if (dropdownRect.contains(click)) {
-            dropdownExpanded = !dropdownExpanded;
-            reDraw();
-            return;
-        }
-
-        if (dropdownExpanded) {
-            for (int i = 0; i < 6; i++) {
-                if (dropdownItemRects[i].contains(click)) {
-                    currentAlgorithm = i + 1;
-                    dropdownExpanded = false;
-                    if (gameState.isGameOver())
-                        runAlgorithm(static_cast<AlgorithmType>(currentAlgorithm));
-                    reDraw();
-                    return;
-                }
-            }
-            dropdownExpanded = false;
-            reDraw();
-            return;
-        }
-
-        if (startButtonRect.contains(click) && algorithmRunning) { startAnimation(); return; }
-        if (pauseButtonRect.contains(click) && algorithmRunning) { pauseAnimation(); return; }
-        if (stepButtonRect.contains(click) && algorithmRunning) { stepAnimation();  return; }
-        if (resetButtonRect.contains(click) && algorithmRunning) { resetAlgorithmVisualization(); return; }
-        if (generateNewGameRect.contains(click)) { resetGame(); return; }
     }
 
     void resetGame() {
@@ -410,32 +191,6 @@ protected:
             reDraw();
         }
     }
-
-    void onResize(const gui::Size& newSize) override {
-        gui::CoordType minDim = std::min(newSize.width, newSize.height);
-        leftZoneWidth = minDim * 0.9;
-        leftZoneLeft = newSize.width * 0.03;
-        leftZoneTop = (newSize.height - leftZoneWidth) / 2;
-        gui::CoordType gap = newSize.width * 0.015;
-        rightZoneLeft = leftZoneLeft + leftZoneWidth + gap;
-        rightZoneWidth = newSize.width - rightZoneLeft - (newSize.width * 0.03);
-        rightZoneTop = newSize.height * 0.05;
-        reDraw();
-    }
-
-    void onDraw(const gui::Rect& rect) override {
-        if (algorithmRunning && isAnimating) updateAnimation();
-        if (algorithmRunning) updateVisualization();
-
-        gui::Shape bg;
-        bg.createRect(rect);
-        bg.drawFill(td::ColorID::Moss);
-
-        drawGameGrid();
-        drawControlPanel();
-    }
-
-private:
 
     void drawGameGrid() {
         int N = GameState::GRID_SIZE;
@@ -547,8 +302,6 @@ private:
         drawComparisonTable(x, y, w);
 
         drawAlgorithmDropdown(x, dropdownY, w);
-        if (dropdownExpanded)
-            drawDropdownMenu(x, dropdownY + 53, w);
     }
 
     void drawSpeedControl(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
@@ -613,26 +366,32 @@ private:
         const char* arrow = dropdownExpanded ? "^" : "v";
         gui::DrawableString::draw(arrow, 1, gui::Rect(x + width - 35, y, x + width - 10, y + 50),
             gui::Font::ID::SystemBold, td::ColorID::White, td::TextAlignment::Center, td::VAlignment::Center);
-    }
 
-    void drawDropdownMenu(gui::CoordType x, gui::CoordType y, gui::CoordType width) {
-        const char* options[] = { "Breadth-First Search (BFS)", "Depth-First Search (DFS)",
-            "Uniform Cost Search (UCS)", "A* Search",
-            "Greedy Best-First Search", "MDP (Markov Decision Process)" };
+        if (dropdownExpanded) {
+            gui::CoordType menuY = y + 53;
+            const char* options[] = { "Breadth-First Search (BFS)", "Depth-First Search (DFS)",
+                "Uniform Cost Search (UCS)", "A* Search",
+                "Greedy Best-First Search", "MDP (Markov Decision Process)" };
 
-        gui::CoordType itemH = 45;
-        gui::Shape bg; bg.createRoundedRect(gui::Rect(x, y, x + width, y + 6 * itemH), 6); bg.drawFill(td::ColorID::Moss);
-        gui::Shape border; border.createRoundedRect(gui::Rect(x, y, x + width, y + 6 * itemH), 6); border.drawWire(td::ColorID::LightGreen, 2);
+            gui::CoordType itemH = 45;
+            gui::Shape menuBg; menuBg.createRoundedRect(gui::Rect(x, menuY, x + width, menuY + 6 * itemH), 6);
+            menuBg.drawFill(td::ColorID::Moss);
+            gui::Shape menuBorder; menuBorder.createRoundedRect(gui::Rect(x, menuY, x + width, menuY + 6 * itemH), 6);
+            menuBorder.drawWire(td::ColorID::LightGreen, 2);
 
-        for (int i = 0; i < 6; i++) {
-            gui::CoordType iy = y + i * itemH;
-            dropdownItemRects[i] = gui::Rect(x, iy, x + width, iy + itemH);
-            if (i + 1 == currentAlgorithm) {
-                gui::Shape hi; hi.createRect(gui::Rect(x + 3, iy + 2, x + width - 3, iy + itemH - 2)); hi.drawFill(td::ColorID::DarkRed);
+            for (int i = 0; i < 6; i++) {
+                gui::CoordType iy = menuY + i * itemH;
+                dropdownItemRects[i] = gui::Rect(x, iy, x + width, iy + itemH);
+
+                if (i + 1 == currentAlgorithm) {
+                    gui::Shape hi; hi.createRect(gui::Rect(x + 3, iy + 2, x + width - 3, iy + itemH - 2));
+                    hi.drawFill(td::ColorID::DarkRed);
+                }
+
+                gui::DrawableString::draw(options[i], strlen(options[i]),
+                    gui::Rect(x + 15, iy, x + width - 15, iy + itemH),
+                    gui::Font::ID::SystemNormal, td::ColorID::White, td::TextAlignment::Left, td::VAlignment::Center);
             }
-            gui::DrawableString::draw(options[i], strlen(options[i]),
-                gui::Rect(x + 15, iy, x + width - 15, iy + itemH),
-                gui::Font::ID::SystemNormal, td::ColorID::White, td::TextAlignment::Left, td::VAlignment::Center);
         }
     }
 
@@ -778,36 +537,276 @@ private:
         }
     }
 
-private:
-    std::mt19937 rng;
-    GameState gameState;
+protected:
+    bool onKeyPressed(const gui::Key& key) override {
+        if (key.isVirtual()) {
+            gui::Key::Virtual k = key.getVirtual();
+            if (k == gui::Key::Virtual::Right) {
+                if (gameState.movePlayer(gameState.getPlayerX() + 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+            if (k == gui::Key::Virtual::Left) {
+                if (gameState.movePlayer(gameState.getPlayerX() - 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+            if (k == gui::Key::Virtual::Up) {
+                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() - 1)) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+            if (k == gui::Key::Virtual::Down) {
+                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() + 1)) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+        }
 
-    gui::CoordType leftZoneLeft = 0, leftZoneTop = 0, leftZoneWidth = 0;
-    gui::CoordType rightZoneLeft = 0, rightZoneTop = 0, rightZoneWidth = 0;
+        if (key.isASCII()) {
+            char ch = key.getChar();
+            if (ch == 'w' || ch == 'W') {
+                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() - 1)) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+            if (ch == 's' || ch == 'S') {
+                if (gameState.movePlayer(gameState.getPlayerX(), gameState.getPlayerY() + 1)) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+            if (ch == 'a' || ch == 'A') {
+                if (gameState.movePlayer(gameState.getPlayerX() - 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+            if (ch == 'd' || ch == 'D') {
+                if (gameState.movePlayer(gameState.getPlayerX() + 1, gameState.getPlayerY())) { playSoundtrack(); reDraw(); }
+                return true;
+            }
+        }
 
-    gui::Image imgPlayer, imgReward, imgBandit, imgMine, imgExit, imgBackground;
-    gui::Sound sndReward, sndMine, sndBandit, sndExit, sndNoExit, sndSoundtrack;
+        return gui::Canvas::onKeyPressed(key);
+    }
 
-    bool imagesLoaded = true, backgroundLoaded = true, soundtrackPlaying = false;
+    void onPrimaryButtonPressed(const gui::InputDevice& inputDevice) override {
+        gui::Point click = inputDevice.getModelPoint();
 
-    bool algorithmRunning = false;
-    int  currentAlgorithm = 0;
-    long long algorithmExecTimeUs = 0;
-    std::vector<std::pair<int, int>> fullAlgorithmPath;
-    std::vector<std::pair<int, int>> fullExploredNodes;
+        if (speedButtonRect.contains(click)) {
+            speedControlExpanded = !speedControlExpanded;
+            reDraw();
+            return;
+        }
 
-    bool isAnimating = false;
-    int  animationPhase = 0, currentExploredIndex = 0, currentPathIndex = 0;
-    int  animationSpeed = 100;
-    const int MAX_SPEED = 500;
-    std::chrono::steady_clock::time_point lastAnimationTime;
+        if (speedControlExpanded && speedSliderRect.contains(click)) {
+            handleSpeedSliderClick(click);
+            return;
+        }
 
-    bool showExploredNodes = true;
-    bool dropdownExpanded = false, speedControlExpanded = false;
+        if (dropdownRect.contains(click)) {
+            dropdownExpanded = !dropdownExpanded;
+            reDraw();
+            return;
+        }
 
-    int displayGrid[GameState::GRID_SIZE][GameState::GRID_SIZE];
+        if (dropdownExpanded) {
+            for (int i = 0; i < 6; i++) {
+                if (dropdownItemRects[i].contains(click)) {
+                    currentAlgorithm = i + 1;
+                    dropdownExpanded = false;
+                    if (gameState.isGameOver())
+                        runAlgorithm(static_cast<AlgorithmType>(currentAlgorithm));
+                    reDraw();
+                    return;
+                }
+            }
+            dropdownExpanded = false;
+            reDraw();
+            return;
+        }
 
-    gui::Rect dropdownRect, dropdownItemRects[6];
-    gui::Rect speedButtonRect, speedSliderRect;
-    gui::Rect startButtonRect, pauseButtonRect, stepButtonRect, resetButtonRect, generateNewGameRect;
+        if (startButtonRect.contains(click) && algorithmRunning) { startAnimation(); return; }
+        if (pauseButtonRect.contains(click) && algorithmRunning) { pauseAnimation(); return; }
+        if (stepButtonRect.contains(click) && algorithmRunning) { stepAnimation();  return; }
+        if (resetButtonRect.contains(click) && algorithmRunning) { resetAlgorithmVisualization(); return; }
+        if (generateNewGameRect.contains(click)) { resetGame(); return; }
+    }
+
+    void onResize(const gui::Size& newSize) override {
+        gui::CoordType minDim = std::min(newSize.width, newSize.height);
+        leftZoneWidth = minDim * 0.9;
+        leftZoneLeft = newSize.width * 0.03;
+        leftZoneTop = (newSize.height - leftZoneWidth) / 2;
+        gui::CoordType gap = newSize.width * 0.015;
+        rightZoneLeft = leftZoneLeft + leftZoneWidth + gap;
+        rightZoneWidth = newSize.width - rightZoneLeft - (newSize.width * 0.03);
+        rightZoneTop = newSize.height * 0.05;
+        reDraw();
+    }
+
+    void onDraw(const gui::Rect& rect) override {
+        if (algorithmRunning && isAnimating) updateAnimation();
+        if (algorithmRunning) updateVisualization();
+
+        gui::Shape bg;
+        bg.createRect(rect);
+        bg.drawFill(td::ColorID::Moss);
+
+        drawGameGrid();
+        drawControlPanel();
+    }
+
+public:
+    SimulationCanvas()
+        : gui::Canvas({ gui::InputDevice::Event::Keyboard, gui::InputDevice::Event::PrimaryClicks })
+        , rng(std::random_device{}())
+        , gameState(rng)
+        , imgPlayer(":player")
+        , imgReward(":reward")
+        , imgBandit(":bandit")
+        , imgMine(":mine")
+        , imgExit(":exit")
+        , imgBackground(":background")
+        , sndReward(":rewardSound")
+        , sndMine(":mineSound")
+        , sndBandit(":banditSound")
+        , sndExit(":exitSound")
+        , sndNoExit(":noExitSound")
+        , sndSoundtrack(":soundtrack") {
+
+        enableResizeEvent(true);
+        lastAnimationTime = std::chrono::steady_clock::now();
+
+        gameState.setGameEventCallback([this](const std::string& event, int value) {
+            handleGameEvent(event, value);
+            });
+    }
+
+    ~SimulationCanvas() = default;
+
+    bool isGameOver() const { return gameState.isGameOver(); }
+    bool isGameWon() const { return gameState.isGameWon(); }
+    int getGold() const { return gameState.getGold(); }
+
+    std::pair<int, int> getPlayerPosition() const {
+        return { gameState.getPlayerX(), gameState.getPlayerY() };
+    }
+
+    void setAnimationSpeed(int speedMS) { animationSpeed = speedMS; }
+    int getAnimationSpeed() const { return animationSpeed; }
+
+    void runAlgorithm(AlgorithmType type) {
+        if (!gameState.isGameOver()) return;
+
+        algorithmRunning = true;
+        isAnimating = (type != AlgorithmType::BFS);
+
+        const auto& initialState = gameState.getInitialState();
+        std::pair<int, int> start = { initialState.playerStartX, initialState.playerStartY };
+        std::pair<int, int> exit = { initialState.exitX, initialState.exitY };
+
+        auto searchStart = std::chrono::steady_clock::now();
+
+        DungeonAlgorithms::SearchResult result;
+        if (type == AlgorithmType::BFS)
+            result = DungeonAlgorithms::bfsSearch(initialState.actualGrid, start, exit);
+        else if (type == AlgorithmType::DFS)
+            result = DungeonAlgorithms::dfsSearch(initialState.actualGrid, start, exit);
+        else if (type == AlgorithmType::UCS)
+            result = DungeonAlgorithms::dijkstraSearch(initialState.actualGrid, start, exit);
+        else if (type == AlgorithmType::AStar)
+            result = DungeonAlgorithms::aStarSearch(initialState.actualGrid, start, exit);
+        else if (type == AlgorithmType::Greedy)
+            result = DungeonAlgorithms::greedySearch(initialState.actualGrid, start, exit);
+        else if (type == AlgorithmType::MDP)
+            result = DungeonAlgorithms::mdpSearch(initialState.actualGrid, start, exit, gameState.getGold());
+
+        auto searchEnd = std::chrono::steady_clock::now();
+        algorithmExecTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(searchEnd - searchStart).count();
+
+        fullAlgorithmPath = result.path;
+        fullExploredNodes = result.exploredNodes;
+        currentAlgorithm = static_cast<int>(type);
+
+        lastAnimationTime = std::chrono::steady_clock::now();
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+
+        setupAlgorithmVisualization();
+    }
+
+    void startAnimation() {
+        if (!algorithmRunning) return;
+        isAnimating = true;
+        lastAnimationTime = std::chrono::steady_clock::now();
+        gui::Canvas::startAnimation();
+        reDraw();
+    }
+
+    void pauseAnimation() {
+        if (!algorithmRunning) return;
+        isAnimating = false;
+        gui::Canvas::stopAnimation();
+        reDraw();
+    }
+
+    void stepAnimation() {
+        if (!algorithmRunning) return;
+
+        if (animationPhase == 0) {
+            if (currentExploredIndex < fullExploredNodes.size())
+                currentExploredIndex++;
+            else
+                animationPhase = 1;
+        }
+        else if (animationPhase == 1) {
+            if (currentPathIndex < fullAlgorithmPath.size())
+                currentPathIndex++;
+        }
+
+        reDraw();
+    }
+
+    void updateAnimation() {
+        if (!isAnimating || !algorithmRunning) return;
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAnimationTime).count();
+        if (elapsed < animationSpeed) return;
+
+        if (animationPhase == 0) {
+            if (currentExploredIndex < fullExploredNodes.size()) {
+                currentExploredIndex++;
+                lastAnimationTime = now;
+            }
+            else {
+                animationPhase = 1;
+                lastAnimationTime = now;
+            }
+        }
+        else if (animationPhase == 1) {
+            if (currentPathIndex < fullAlgorithmPath.size()) {
+                currentPathIndex++;
+                lastAnimationTime = now;
+            }
+            else {
+                isAnimating = false;
+                gui::Canvas::stopAnimation();
+            }
+        }
+    }
+
+    void resetAlgorithmVisualization() {
+        algorithmRunning = false;
+        isAnimating = false;
+        currentAlgorithm = 0;
+        algorithmExecTimeUs = 0;
+        fullAlgorithmPath.clear();
+        fullExploredNodes.clear();
+        currentExploredIndex = 0;
+        currentPathIndex = 0;
+        animationPhase = 0;
+
+        gameState.resetVisualization();
+        reDraw();
+    }
+
+    void toggleExploredNodes() {
+        showExploredNodes = !showExploredNodes;
+        reDraw();
+    }
 };

@@ -10,6 +10,7 @@
 
 class GameState {
 public:
+    //public konstante na vrhu jer moraju bit accesible
     static const int GRID_SIZE = 10;
 
     static const int EMPTY = 0;
@@ -34,6 +35,79 @@ public:
         std::vector<std::pair<int, int>> mines;
     };
 
+private:
+
+    int playerX = 0, playerY = 0;
+    int gold = 0;
+    int collectedRewards = 0;
+    bool gameOver = false, gameWon = false, hasReachedExitOnce = false;
+
+    int actualGrid[GRID_SIZE][GRID_SIZE];
+    int displayGrid[GRID_SIZE][GRID_SIZE];
+    InitialState initialState;
+
+    std::vector<std::pair<int, int>> exploredNodes;
+    GameEventCallback gameEventCallback;
+
+
+    void initializeGame(std::mt19937& rng) {
+        memset(actualGrid, 0, sizeof(actualGrid));
+        memset(displayGrid, 0, sizeof(displayGrid));
+        exploredNodes.clear();
+
+        gold = 0;
+        collectedRewards = 0;
+        gameOver = false;
+        gameWon = false;
+        hasReachedExitOnce = false;
+
+        initialState.rewards.clear();
+        initialState.bandits.clear();
+        initialState.mines.clear();
+
+        std::uniform_int_distribution<int> rowDist(0, GRID_SIZE - 1);
+        std::uniform_int_distribution<int> playerRowDist(0, GRID_SIZE - 1);
+
+        playerX = 0;
+        playerY = playerRowDist(rng);
+        actualGrid[playerX][playerY] = PLAYER;
+        displayGrid[playerX][playerY] = PLAYER;
+        initialState.playerStartX = playerX;
+        initialState.playerStartY = playerY;
+
+        int exitRow = rowDist(rng);
+        actualGrid[GRID_SIZE - 1][exitRow] = EXIT;
+        displayGrid[GRID_SIZE - 1][exitRow] = EXIT;
+        initialState.exitX = GRID_SIZE - 1;
+        initialState.exitY = exitRow;
+
+        for (int i = 0; i < 5; i++) placeRandomTile(rng, actualGrid, REWARD, &initialState.rewards);
+        for (int i = 0; i < 5; i++) placeRandomTile(rng, actualGrid, BANDIT, &initialState.bandits);
+        for (int i = 0; i < 5; i++) placeRandomTile(rng, actualGrid, MINE, &initialState.mines);
+
+        memcpy(initialState.actualGrid, actualGrid, sizeof(actualGrid));
+    }
+
+    static void placeRandomTile(std::mt19937& rng, int grid[GRID_SIZE][GRID_SIZE], int tileType,
+        std::vector<std::pair<int, int>>* positions = nullptr)
+    {
+        std::uniform_int_distribution<int> colDist(1, GRID_SIZE - 2);
+        std::uniform_int_distribution<int> rowDist(0, GRID_SIZE - 1);
+
+        int x, y, attempts = 0;
+        do {
+            x = colDist(rng);
+            y = rowDist(rng);
+            attempts++;
+        } while (grid[x][y] != 0 && attempts < 100);
+
+        if (grid[x][y] == 0) {
+            grid[x][y] = tileType;
+            if (positions) positions->push_back({ x, y });
+        }
+    }
+
+public:
     GameState(std::mt19937& rng) {
         initializeGame(rng);
     }
@@ -49,6 +123,12 @@ public:
     bool hasMetRewardRequirement() const { return gold >= 20; }
     bool hasEverReachedExit() const { return hasReachedExitOnce; }
 
+    int getDisplayCell(int x, int y) const {
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE)
+            return displayGrid[x][y];
+        return EMPTY;
+    }
+
     void setGameEventCallback(const GameEventCallback& callback) {
         gameEventCallback = callback;
     }
@@ -59,12 +139,6 @@ public:
 
     void clearExploredNodes() {
         exploredNodes.clear();
-    }
-
-    int getDisplayCell(int x, int y) const {
-        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE)
-            return displayGrid[x][y];
-        return EMPTY;
     }
 
     void applyMinePenalty() {
@@ -122,6 +196,7 @@ public:
 
         return true;
     }
+
 
     void revealAll() {
         for (int i = 0; i < GRID_SIZE; i++)
@@ -186,74 +261,4 @@ public:
                     displayGrid[i][j] = actualGrid[i][j];
         }
     }
-
-private:
-    void initializeGame(std::mt19937& rng) {
-        memset(actualGrid, 0, sizeof(actualGrid));
-        memset(displayGrid, 0, sizeof(displayGrid));
-        exploredNodes.clear();
-
-        gold = 0;
-        collectedRewards = 0;
-        gameOver = false;
-        gameWon = false;
-        hasReachedExitOnce = false;
-
-        initialState.rewards.clear();
-        initialState.bandits.clear();
-        initialState.mines.clear();
-
-        std::uniform_int_distribution<int> rowDist(0, GRID_SIZE - 1);
-        std::uniform_int_distribution<int> playerRowDist(0, GRID_SIZE - 1);
-
-        playerX = 0;
-        playerY = playerRowDist(rng);
-        actualGrid[playerX][playerY] = PLAYER;
-        displayGrid[playerX][playerY] = PLAYER;
-        initialState.playerStartX = playerX;
-        initialState.playerStartY = playerY;
-
-        int exitRow = rowDist(rng);
-        actualGrid[GRID_SIZE - 1][exitRow] = EXIT;
-        displayGrid[GRID_SIZE - 1][exitRow] = EXIT;
-        initialState.exitX = GRID_SIZE - 1;
-        initialState.exitY = exitRow;
-
-        for (int i = 0; i < 5; i++) placeRandomTile(rng, actualGrid, REWARD, &initialState.rewards);
-        for (int i = 0; i < 5; i++) placeRandomTile(rng, actualGrid, BANDIT, &initialState.bandits);
-        for (int i = 0; i < 5; i++) placeRandomTile(rng, actualGrid, MINE, &initialState.mines);
-
-        memcpy(initialState.actualGrid, actualGrid, sizeof(actualGrid));
-    }
-
-    static void placeRandomTile(std::mt19937& rng, int grid[GRID_SIZE][GRID_SIZE], int tileType,
-        std::vector<std::pair<int, int>>* positions = nullptr)
-    {
-        std::uniform_int_distribution<int> colDist(1, GRID_SIZE - 2);
-        std::uniform_int_distribution<int> rowDist(0, GRID_SIZE - 1);
-
-        int x, y, attempts = 0;
-        do {
-            x = colDist(rng);
-            y = rowDist(rng);
-            attempts++;
-        } while (grid[x][y] != 0 && attempts < 100);
-
-        if (grid[x][y] == 0) {
-            grid[x][y] = tileType;
-            if (positions) positions->push_back({ x, y });
-        }
-    }
-
-    int playerX = 0, playerY = 0;
-    int gold = 0;
-    int collectedRewards = 0;
-    bool gameOver = false, gameWon = false, hasReachedExitOnce = false;
-
-    int actualGrid[GRID_SIZE][GRID_SIZE];
-    int displayGrid[GRID_SIZE][GRID_SIZE];
-    InitialState initialState;
-
-    std::vector<std::pair<int, int>> exploredNodes;
-    GameEventCallback gameEventCallback;
 };
