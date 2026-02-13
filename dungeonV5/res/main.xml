@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DevRes>
+    <Images>
+        <Res id="exit" path=":images/exit.png"/>
+        <Res id="reward" path=":images/reward.png"/>
+        <Res id="bandit" path=":images/bandit.png"/>
+        <Res id="mine" path=":images/mine.png"/>
+        <Res id="player" path=":images/player.png"/>
+        <Res id="background" path=":images/background.png"/>
+    </Images>
+    <Sounds>
+        <Res id="rewardSound" path=":sounds/rewardSound.wav"/>
+        <Res id="mineSound" path=":sounds/mineSound.wav"/>
+        <Res id="banditSound" path=":sounds/banditSound.wav"/>
+        <Res id="exitSound" path=":sounds/exitSound.wav"/>
+        <Res id="noExitSound" path=":sounds/noExitSound.wav"/>
+        <Res id="soundtrack" path=":sounds/soundtrack.wav"/>
+    </Sounds>
+</DevRes>

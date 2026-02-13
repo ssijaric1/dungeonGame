@@ -1,0 +1,18 @@
+# Visual Studio / VSCode
+.vscode/
+.vs/
+
+# Build folders
+Debug/
+Release/
+CMakeFiles/
+CMakeCache.txt
+
+# Compiled files
+*.ipch
+*.ilk
+*.pdb
+*.exe
+*.db
+*.suo
+*.user
