@@ -20,7 +20,7 @@
 
 class SimulationCanvas : public gui::Canvas {
 private:
-    enum class AlgorithmType { None, BFS, DFS, UCS, AStar, Greedy, MDP };
+    enum class AlgorithmType { None, BFS, DFS, DIJKSTRA, AStar, Greedy, MDP };
     std::mt19937 rng;
     GameState gameState;
 
@@ -69,7 +69,7 @@ private:
     static const char* algorithmName(AlgorithmType type) {
         if (type == AlgorithmType::BFS)    return "BFS";
         if (type == AlgorithmType::DFS)    return "DFS";
-        if (type == AlgorithmType::UCS)    return "UCS";
+        if (type == AlgorithmType::DIJKSTRA)    return "DIJSKTRA";
         if (type == AlgorithmType::AStar)  return "A*";
         if (type == AlgorithmType::Greedy) return "Greedy";
         if (type == AlgorithmType::MDP)    return "MDP";
@@ -381,7 +381,7 @@ private:
         gui::Shape border; border.createRoundedRect(dropdownRect, 6); border.drawWire(td::ColorID::LightGreen, 2);
 
         const char* names[] = { "Select Algorithm...", "Breadth-First Search (BFS)",
-            "Depth-First Search (DFS)", "Uniform Cost Search (UCS)",
+            "Depth-First Search (DFS)", "Dijkstra Search",
             "A* Search", "Greedy Best-First Search", "MDP (Markov Decision Process)" };
         std::string label = names[currentAlgorithm];
 
@@ -396,7 +396,7 @@ private:
         if (dropdownExpanded) {
             gui::CoordType menuY = y + 53;
             const char* options[] = { "Breadth-First Search (BFS)", "Depth-First Search (DFS)",
-                "Uniform Cost Search (UCS)", "A* Search",
+                "Dijkstra Search", "A* Search",
                 "Greedy Best-First Search", "MDP (Markov Decision Process)" };
 
             gui::CoordType itemH = 45;
@@ -509,7 +509,7 @@ private:
             heuristic = "None (blind search)"; timeC = "O(V + E) = O(b^d)"; spaceC = "O(h) = O(bd) if limited";
         }
         else if (currentAlgorithm == 3) {
-            name = "UCS / Dijkstra";
+            name = "Dijkstra";
             desc = "Uses priority queue for min cost. Costs: Rewards=0, Mines=8, Bandits=15.";
             heuristic = "None (uses actual cost only)"; timeC = "O((V + E) log V)"; spaceC = "O(V)";
         }
@@ -712,7 +712,7 @@ public:
         DungeonAlgorithms::SearchResult result;
         if (type == AlgorithmType::BFS)    result = DungeonAlgorithms::bfsSearch(initialState.actualGrid, start, exit);
         else if (type == AlgorithmType::DFS)    result = DungeonAlgorithms::dfsSearch(initialState.actualGrid, start, exit);
-        else if (type == AlgorithmType::UCS)    result = DungeonAlgorithms::dijkstraSearch(initialState.actualGrid, start, exit);
+        else if (type == AlgorithmType::DIJKSTRA)    result = DungeonAlgorithms::dijkstraSearch(initialState.actualGrid, start, exit);
         else if (type == AlgorithmType::AStar)  result = DungeonAlgorithms::aStarSearch(initialState.actualGrid, start, exit);
         else if (type == AlgorithmType::Greedy) result = DungeonAlgorithms::greedySearch(initialState.actualGrid, start, exit);
         else if (type == AlgorithmType::MDP)    result = DungeonAlgorithms::mdpSearch(initialState.actualGrid, start, exit, gameState.getGold());
